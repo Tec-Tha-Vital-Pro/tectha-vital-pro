@@ -1,4 +1,4 @@
-# Tec Tha Care Connect
+# Tec Tha Vital
 
 Hospital automation by **Tec Tha**. It connects a hospital's existing CRM and billing software, talks to patients on WhatsApp, and gives the owner one view of every branch.
 

@@ -1,10 +1,10 @@
-# Tec Tha Care Connect — Product Knowledge Base
+# Tec Tha Vital — Product Knowledge Base
 
 Every Tec Tha team member and agent reads this before working. If a decision changes, update this file.
 
 ## 1. Company and product
 
-- **Tec Tha** is an IT and AI automation company. The first product is **Tec Tha Care Connect**, automation for mid-size Indian hospitals.
+- **Tec Tha** is an IT and AI automation company. The first product is **Tec Tha Vital**, automation for mid-size Indian hospitals.
 - **First client (prospect):** a hospital group with **2 branches** that already uses a **CRM** and **separate billing software**. We don't yet know which CRM or billing product; the discovery questions are in section 9.
 - **Position:** we don't replace the hospital's software. We **connect** the CRM, billing software and WhatsApp around the patient, and add automations and one owner view across branches.
 - **Budget reality:** Tec Tha has no funds yet. Everything must run on free or near-free tools: a laptop or small VPS, SQLite, the WhatsApp Cloud API test number, and open-source tools.

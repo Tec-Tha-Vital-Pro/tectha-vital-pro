@@ -1,4 +1,4 @@
-# Tec Tha Care Connect — Test Plan
+# Tec Tha Vital — Test Plan
 
 Owner: QA Lead. Status: **Phase 1** (plan, first end-to-end run, first bug list). Bugs are in [BUGS.md](BUGS.md).
 

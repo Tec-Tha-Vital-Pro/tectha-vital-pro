@@ -1,4 +1,4 @@
-# Tec Tha Care Connect — Runbook
+# Tec Tha Vital — Runbook
 
 For whoever looks after the server: the Tec Tha admin, or the hospital's IT person.
 Each section says how to **spot** the problem and how to **fix** it. Deployment itself is in [DEPLOY.md](DEPLOY.md).

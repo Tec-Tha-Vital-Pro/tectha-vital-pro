@@ -1,4 +1,4 @@
-# Deploying Tec Tha Care Connect
+# Deploying Tec Tha Vital
 
 Three ways to run it, cheapest first. Day-to-day operation (backups, updates, incidents) is in [RUNBOOK.md](RUNBOOK.md). The WhatsApp and hospital checklist is in [GO_LIVE.md](GO_LIVE.md).
 

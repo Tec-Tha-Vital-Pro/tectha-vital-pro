@@ -2,7 +2,7 @@
 
 Owner of this document: Implementation & Customer Success Manager, Tec Tha.
 
-**Rule:** every number in a client report comes from the hospital's own records or from Tec Tha Care Connect, with its source written next to it. Estimates are labelled as estimates. Sample data is never shown as a result (PRODUCT_KNOWLEDGE.md section 7).
+**Rule:** every number in a client report comes from the hospital's own records or from Tec Tha Vital, with its source written next to it. Estimates are labelled as estimates. Sample data is never shown as a result (PRODUCT_KNOWLEDGE.md section 7).
 
 ## Part A: Measuring the baseline (week 1, before go-live)
 
@@ -40,7 +40,7 @@ Sent by the 5th working day of each month to the Owner and pilot lead, as one pa
 
 ---
 
-**[Hospital name]: Tec Tha Care Connect results, [Month YYYY]**
+**[Hospital name]: Tec Tha Vital results, [Month YYYY]**
 Branch(es) live: [Branch 1] since [date] · Comparison: [Branch 2] · Prepared by [name], Tec Tha, on [date]
 
 **1. Headline (one sentence, real numbers only)**

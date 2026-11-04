@@ -1,4 +1,4 @@
-# Tec Tha Care Connect — Roadmap
+# Tec Tha Vital — Roadmap
 
 Owner: Head of Product · Last reviewed: 4 Nov 2026. Feature numbers (F1–F30) refer to [PRD.md](PRD.md).
 

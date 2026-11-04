@@ -1,7 +1,7 @@
 # Staff training SOPs (one page per role)
 
 Owner of this document: Implementation & Customer Success Manager, Tec Tha.
-Print each role's page and keep it at that desk. Screen and button names below are exactly what staff see in Tec Tha Care Connect.
+Print each role's page and keep it at that desk. Screen and button names below are exactly what staff see in Tec Tha Vital.
 
 **Rules for everyone (सभी के लिए नियम)**
 

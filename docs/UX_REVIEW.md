@@ -18,7 +18,7 @@ The problems are in task flow more than in looks:
 
 Counts: **Blocker 3 · Major 18 · Minor 17 · Polish 6**
 
-Note: the product is now called **Tec Tha HP**, but many screens still say "Care Connect" (M18).
+Note: the product is now called **Tec Tha Vital**, but many screens still say "Care Connect" (M18).
 
 ---
 
@@ -151,20 +151,20 @@ Note: the product is now called **Tec Tha HP**, but many screens still say "Care
 - **Wrong:** Tokens are counted per branch per day, so the merged list shows token 2 twice and token 3 three times. They're given in booking order, so a 13:00 walk-in gets token 5 after a 13:15 token 3. Some booked visits show "—".
 - **Fix:** In the all-branches view, show the token with its branch, as `A-2` / `B-2` (the `.branch-code` style is already in `style.css`). Label the column "Token (per branch)". Show "—" only for cancelled visits, and say "At check-in" otherwise, as the patient app does.
 
-### M18. Screens still show the old product name "Care Connect" (product is now "Tec Tha HP")
+### M18. Screens still show the old product name "Care Connect" (product is now "Tec Tha Vital")
 - **Screens:** Every staff screen, the staff login, the patient app header, patient Profile, the offline page, and the installed app name.
 - **Wrong:** These visible strings still say "Care Connect":
-  - `templates/base.html` line 6 (`<title>` default "Tec Tha Care Connect"), line 31 (sidebar `<small>Care Connect</small>`), line 57 (top bar "Tec Tha Care Connect") and line 95 (footer "Tec Tha Care Connect · every message and change is recorded…").
-  - `templates/login.html` line 6 (`aria-label="About Tec Tha Care Connect"`, which screen readers say aloud) and line 9 (brand `<small>Care Connect</small>`).
-  - `templates/patient/base.html` line 25 (patient app bar `<small>Tec Tha Care Connect</small>`, on every patient screen).
-  - `templates/patient/profile.html` line 28 (footer "· Tec Tha Care Connect").
+  - `templates/base.html` line 6 (`<title>` default "Tec Tha Vital"), line 31 (sidebar `<small>Care Connect</small>`), line 57 (top bar "Tec Tha Vital") and line 95 (footer "Tec Tha Vital · every message and change is recorded…").
+  - `templates/login.html` line 6 (`aria-label="About Tec Tha Vital"`, which screen readers say aloud) and line 9 (brand `<small>Care Connect</small>`).
+  - `templates/patient/base.html` line 25 (patient app bar `<small>Tec Tha Vital</small>`, on every patient screen).
+  - `templates/patient/profile.html` line 28 (footer "· Tec Tha Vital").
   - `static/offline.html` lines 3 and 12 (title and body).
-  - `static/manifest.webmanifest` `"name": "Tec Tha Care Connect"`. This is the name shown on the phone home screen and in the install prompt. Also check `short_name` and the patient manifest served by `patient_app.manifest()`.
+  - `static/manifest.webmanifest` `"name": "Tec Tha Vital"`. This is the name shown on the phone home screen and in the install prompt. Also check `short_name` and the patient manifest served by `patient_app.manifest()`.
   - `app/main.py` line 29 (`FastAPI(title=…)`, shown on `/docs`).
   - Not visible to users, but should also change: comment headers in `style.css`, `patient.css`, `app.js` and `sw.js`, and the docstring and `print` in `seed.py`.
   - The icons in `static/icons/` (`icon-192.png` with the "T." mark) don't contain the words, but check that they still match the brand.
 - **Why:** A mixed name in the pilot looks unfinished to the hospital, and a patient sees the old name on every screen.
-- **Fix:** Replace the visible strings with "Tec Tha HP": the sidebar `<small>HP</small>` (or one line, `<strong>Tec Tha HP</strong>`), the top bar and footer "Tec Tha HP", and the patient app bar `<small>Tec Tha HP</small>`. Better still, put the name in one place: `config.PRODUCT_NAME = "Tec Tha HP"` exposed as a Jinja global `product`, then use `{{ product }}` in the templates and manifests so it can't drift again. Bump the service-worker cache version so installed apps pick up the new manifest and offline page.
+- **Fix:** Replace the visible strings with "Tec Tha Vital": the sidebar `<small>HP</small>` (or one line, `<strong>Tec Tha Vital</strong>`), the top bar and footer "Tec Tha Vital", and the patient app bar `<small>Tec Tha Vital</small>`. Better still, put the name in one place: `config.PRODUCT_NAME = "Tec Tha Vital"` exposed as a Jinja global `product`, then use `{{ product }}` in the templates and manifests so it can't drift again. Bump the service-worker cache version so installed apps pick up the new manifest and offline page.
 
 ---
 

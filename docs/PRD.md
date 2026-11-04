@@ -1,4 +1,4 @@
-# Tec Tha Care Connect — Product Requirements (PRD)
+# Tec Tha Vital — Product Requirements (PRD)
 
 Owner: Head of Product · Last reviewed: 4 Nov 2026 against the code in `app/` (commit `7861cf0` plus uncommitted work in the tree).
 Read with [PRODUCT_KNOWLEDGE.md](PRODUCT_KNOWLEDGE.md) (rules in section 7 apply to every item here) and [ROADMAP.md](ROADMAP.md).

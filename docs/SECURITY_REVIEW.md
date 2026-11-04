@@ -1,4 +1,4 @@
-# Tec Tha Care Connect — Security & Privacy Review
+# Tec Tha Vital — Security & Privacy Review
 
 Reviewer: Security & Privacy Engineer · Date: 2026-11-04 · Scope: everything under `app/` at the time of review.
 

@@ -1,4 +1,4 @@
-# Tec Tha Care Connect: Compliance and Workflow Review
+# Tec Tha Vital: Compliance and Workflow Review
 
 Owner: Healthcare Domain & Compliance Lead
 Date: 4 Nov 2026

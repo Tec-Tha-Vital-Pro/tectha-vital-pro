@@ -58,7 +58,7 @@ After every S1 and S2: a short written report within 2 working days (what happen
 - A patient complaint about a message.
 - Anyone seeing data they should not see, or a lost or shared password.
 - The system or a screen not working, or staff going back to paper.
-- A big mismatch between Tec Tha Care Connect and the billing software (amounts, dues, payments).
+- A big mismatch between Tec Tha Vital and the billing software (amounts, dues, payments).
 
 **Report the same day:**
 - A staff member joining, leaving or changing role or branch (their login must be created or closed the same day).

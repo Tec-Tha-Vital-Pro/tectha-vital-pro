@@ -1,6 +1,6 @@
 # Tec Tha — Team, roles and responsibilities
 
-The team you would hire to build, sell and run Tec Tha Care Connect. Each role is also a Claude agent (`.claude/agents/<role>.md`) that reads [PRODUCT_KNOWLEDGE.md](PRODUCT_KNOWLEDGE.md) first.
+The team you would hire to build, sell and run Tec Tha Vital. Each role is also a Claude agent (`.claude/agents/<role>.md`) that reads [PRODUCT_KNOWLEDGE.md](PRODUCT_KNOWLEDGE.md) first.
 
 When funds allow, hire in this order: **Implementation Manager**, then **Full-stack Engineer**, then **Healthcare Domain Lead (part-time advisor)**. Until then, the founder plus these agents cover every role.
 

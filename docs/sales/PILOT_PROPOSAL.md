@@ -1,4 +1,4 @@
-# Pilot Proposal: Tec Tha Care Connect
+# Pilot Proposal: Tec Tha Vital
 
 **For:** [Hospital name], [Branch 1] and [Branch 2]
 **From:** Tec Tha, [Founder name], [phone], [email]
