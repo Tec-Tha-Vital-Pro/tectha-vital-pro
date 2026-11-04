@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Offline · Tec Tha Care Connect</title>
+<meta name="robots" content="noindex, nofollow">
+<title>Offline · {{ product }}</title>
 <style>
 :root{--bg:#f2f5f3;--fg:#13221d;--muted:#55665f;--accent:#0e5c48}
 @media (prefers-color-scheme: dark){:root{--bg:#0d1613;--fg:#e4ede9;--muted:#9aaca5;--accent:#52c49c}}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;padding:24px}
 main{max-width:32ch;text-align:center}h1{font-size:1.3rem;margin:16px 0 8px}p{color:var(--muted);margin:0 0 20px}
-img{width:64px;height:64px;border-radius:16px}button{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 20px;cursor:pointer}
+img{width:64px;height:64px;border-radius:16px}.retry{display:inline-block;font-weight:600;background:var(--accent);color:#fff;text-decoration:none;border-radius:10px;padding:12px 20px;min-height:44px}
 </style></head>
 <body><main><img src="/static/icons/icon-192.png" alt=""><h1>You're offline</h1>
-<p>Tec Tha Care Connect needs a connection to show patient data. Nothing is stored on this device.</p>
-<button type="button" onclick="location.reload()">Try again</button></main></body></html>
+<p>{{ product }} needs a connection to show patient data. Nothing is stored on this device.</p>
+<a class="retry" href="/">Try again</a></main></body></html>

@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from tests.flash_util import flash
 from fastapi.testclient import TestClient
 
 from app import auth, automations, billing, db, main, patients, util
@@ -395,7 +397,7 @@ def test_remind_on_paid_or_missing_bill_is_friendly(client, two_branches):
     login(client, "bill1", role="billing")
     token = csrf_of(client, "/billing")
     r = client.post(f"/billing/{bid}/remind", data={"csrf": token}, follow_redirects=False)
-    assert r.status_code == 303 and "err=" in r.headers["location"] and "fully%20paid" in r.headers["location"]
+    assert r.status_code == 303 and "fully paid" in flash(r.headers["location"], "err")
     r = client.post("/billing/424242/remind", data={"csrf": token})
     assert r.status_code == 404 and "could not find that bill" in r.text
 
@@ -403,9 +405,9 @@ def test_remind_on_paid_or_missing_bill_is_friendly(client, two_branches):
 def test_run_automations_message_is_plain_english(client, fresh_db):
     login(client)
     r = client.post("/settings/run-automations", data={"csrf": csrf_of(client, "/settings")}, follow_redirects=False)
-    loc = r.headers["location"]
-    assert "Automations%20ran" in loc
-    assert "%7B" not in loc and "reminder_24h" not in loc       # no Python dicts
+    loc = flash(r.headers["location"])
+    assert "Automations ran" in loc
+    assert "{" not in loc and "reminder_24h" not in loc       # no Python dicts
     text = automations.summary({"appointment_reminders": {"reminder_24h": 35, "reminder_2h": 4, "blocked": 4},
                                 "dues_reminders": {"sent": 11, "blocked": 0, "call_tasks": 0},
                                 "daily_owner_report": 74, "detect_unbilled": "off"})

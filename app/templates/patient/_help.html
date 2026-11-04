@@ -1,0 +1,14 @@
+{% from "patient/_icons.html" import icon %}
+{% macro help_box(t, help_wa, help_call) %}
+<section class="help-box" aria-label="{{ t('help_title') }}">
+  <p class="help-title">{{ icon('chat') }}<span>{{ t('help_title') }}</span></p>
+  {% if help_wa or help_call %}
+  <div class="help-actions">
+    {% if help_wa %}<a class="btn block" href="https://wa.me/{{ help_wa }}">{{ t('help_wa') }}</a>{% endif %}
+    {% if help_call %}<a class="btn block ghost" href="tel:+{{ help_call }}">{{ t('help_call') }} · +91 {{ help_call[2:7] }} {{ help_call[7:] }}</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="muted small">{{ t('help_none') }}</p>
+  {% endif %}
+</section>
+{% endmacro %}

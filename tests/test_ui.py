@@ -104,7 +104,8 @@ def test_add_and_update_lead(client):
 def test_invalid_phone_shows_error(client):
     login(client)
     r = client.post("/leads", data={"csrf": csrf_of(client), "name": "X", "phone": "123", "source": "Walk-in"})
-    assert "Not a valid Indian mobile number" in r.text
+    assert r.status_code == 400 and "Enter a 10-digit mobile number" in r.text      # B1: plain words, under the field
+    assert 'aria-invalid="true"' in r.text and 'value="123"' in r.text and "data-open-on-load" in r.text
 
 
 def test_csrf_rejected(client):

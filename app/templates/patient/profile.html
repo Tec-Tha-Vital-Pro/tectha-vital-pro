@@ -14,6 +14,11 @@
 </div>
 <h2 class="section-title">Family</h2>
 <div class="card pad"><p class="muted">Family members with their own mobile number log in on their own phone. To add a child or parent under your number, ask the front desk.</p></div>
+<h2 class="section-title">{{ t('language') }}</h2>
+<div class="card pad lang-row" role="group" aria-label="{{ t('language') }}">
+  <a class="btn {{ 'primary' if lang == 'en' else '' }}" href="/my/lang/en?next=/my/profile" lang="en" {% if lang == 'en' %}aria-current="true"{% endif %}>English</a>
+  <a class="btn {{ 'primary' if lang == 'hi' else '' }}" href="/my/lang/hi?next=/my/profile" lang="hi" {% if lang == 'hi' %}aria-current="true"{% endif %}>हिन्दी</a>
+</div>
 <h2 class="section-title">Messages</h2>
 <form method="post" action="/my/profile/consent" class="card pad toggle-row" data-once>
   <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -23,7 +28,7 @@
 </form>
 <form method="post" action="/my/logout" class="pad-t">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <button class="btn block ghost danger" type="submit">Log out</button>
+  <button class="btn block ghost danger" type="submit">{{ t('log_out') }}</button>
 </form>
-<p class="small muted center foot">{{ hospital }} · Tec Tha Care Connect</p>
+<p class="small muted center foot">{{ hospital }} · {{ product }}</p>
 {% endblock %}

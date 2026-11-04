@@ -42,6 +42,26 @@
 {{ path }}{% if q %}?{% for k, v in q.items() %}{{ k|urlencode }}={{ v|urlencode }}{% if not loop.last %}&amp;{% endif %}{% endfor %}{% endif %}
 {%- endmacro %}
 
+{#- Inline field error (B1). attrs=True prints the aria attributes for the input itself. -#}
+{% macro field_err(errors, key, id, attrs=False, hint=None) -%}
+{%- if attrs -%}
+{%- if errors.get(key) %}aria-invalid="true" aria-describedby="{{ id }}-err"{% elif hint %}aria-describedby="{{ id }}-hint"{% endif -%}
+{%- else -%}
+{%- if errors.get(key) %}<p class="field-err" id="{{ id }}-err">{{ icon('alert', cls='ic xs') }} {{ errors[key] }}</p>{% elif hint %}<p class="hint field-hint" id="{{ id }}-hint">{{ hint }}</p>{% endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{#- Indian mobile number inputs: the browser catches obvious mistakes before the form is sent. -#}
+{% macro phone_attrs() -%}inputmode="numeric" pattern="[0-9 +]{10,15}" maxlength="15" autocomplete="tel-national" title="10-digit mobile number"{%- endmacro %}
+
+{#- Appointment status, in the words staff use (M2). -#}
+{% macro appt_pill(s) -%}
+{%- set m = {'Booked': ('p-warn', 'Not confirmed'), 'Confirmed': ('p-ok', 'Confirmed'), 'Visited': ('p-acc', 'Seen'),
+             'NoShow': ('p-bad', 'No-show'), 'Cancelled': ('p-muted', 'Cancelled')} -%}
+{%- set c = m.get(s, ('p-info', s)) -%}
+<span class="pill {{ c[0] }}">{{ c[1] }}</span>
+{%- endmacro %}
+
 {% macro page_head(title, sub=None) %}
 <div class="page-head">
   <div class="page-title">

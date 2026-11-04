@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field, status_pill, icon %}
+{% from "_macros.html" import csrf_field, status_pill, appt_pill, icon %}
 {% block title %}{{ p.name }}{% endblock %}
 {% block content %}
 {% set due = namespace(v=0) %}{% for b in bills %}{% set due.v = due.v + (b.total - b.paid) %}{% endfor %}
@@ -38,7 +38,7 @@
       <div class="sec-head"><h2 id="ap-h">Appointments</h2><span class="muted small">All branches</span></div>
       <ul class="timeline">
         {% for a in appts %}
-        <li><span class="when">{{ a.starts_at[8:10] }}/{{ a.starts_at[5:7] }}/{{ a.starts_at[:4] }} {{ a.starts_at[11:16] }}</span><span class="what">{{ a.doctor }} <span class="muted">· {{ a.branch_name }}{% if a.token_no %} · token {{ a.token_no }}{% endif %}</span></span>{{ status_pill(a.status) }}</li>
+        <li><span class="when">{{ a.starts_at[8:10] }}/{{ a.starts_at[5:7] }}/{{ a.starts_at[:4] }} {{ a.starts_at[11:16] }}</span><span class="what">{{ a.doctor }} <span class="muted">· {{ a.branch_name }}{% if a.token_no %} · token {{ a.branch_id }}-{{ a.token_no }}{% endif %}</span></span>{{ appt_pill(a.status) }}</li>
         {% else %}<li class="muted">No appointments yet.</li>{% endfor %}
       </ul>
     </section>

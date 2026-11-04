@@ -25,7 +25,7 @@
         {{ av(c) }}
         <span class="conv-main">
           <span class="conv-top"><strong>{{ c.title }}</strong><span class="conv-time">{{ c.last.created_at[8:10] }}/{{ c.last.created_at[5:7] }} {{ c.last.created_at[11:16] }}</span></span>
-          <span class="conv-last">{% if c.last.direction == 'out' %}You: {% endif %}{{ c.last.body[:80] }}</span>
+          <span class="conv-last">{% if c.last.direction == 'out' %}You: {% endif %}{% if c.last.template == 'patient_otp' %}Login code sent (hidden){% else %}{{ c.last.body[:80] }}{% endif %}</span>
         </span>
         {% if c.unread_in %}<span class="conv-dot" aria-label="Latest message is from the patient"></span>{% endif %}
       </a></li>
@@ -40,8 +40,8 @@
     <div class="chat-head">
       <a class="icon-btn chat-back" href="/messages" aria-label="Back to conversations">{{ icon('chev-left') }}</a>
       {{ av(selected) }}
-      <span class="who"><strong>{{ selected.title }}</strong><span class="muted small num">+{{ selected.phone[:2] }} {{ selected.phone[2:7] }} {{ selected.phone[7:] }}{% if selected.uid %} · {{ selected.uid }}{% endif %} · {{ selected.count }} message{{ 's' if selected.count != 1 }}</span></span>
-      {% if selected.pid %}<a class="btn sm" href="/patients/{{ selected.pid }}">Patient profile</a>{% endif %}
+      <span class="who"><strong>{{ selected.title }}</strong><span class="muted small num">{{ selected.phone|phone }}{% if selected.uid %} · {{ selected.uid }}{% endif %}<span class="hide-sm"> · {{ selected.count }} message{{ 's' if selected.count != 1 }}</span></span></span>
+      {% if selected.pid and search_action == '/patients' %}<a class="btn sm" href="/patients/{{ selected.pid }}" aria-label="Open patient profile">{{ icon('users') }}<span class="hide-sm">Patient profile</span></a>{% endif %}
     </div>
     <div class="thread" data-thread>
       {% set ns = namespace(day='') %}
@@ -49,7 +49,7 @@
       {% if m.created_at[:10] != ns.day %}{% set ns.day = m.created_at[:10] %}<span class="day-sep">{{ m.created_at[8:10] }}/{{ m.created_at[5:7] }}/{{ m.created_at[:4] }}</span>{% endif %}
       <div class="bubble {{ 'out' if m.direction == 'out' else 'in' }}">
         {% if m.direction == 'out' %}<span class="tpl">{{ m.template|replace('_', ' ') }}</span>{% endif %}
-        <span class="body">{{ m.body }}</span>
+        <span class="body">{% if m.template == 'patient_otp' %}Login code sent (hidden){% else %}{{ m.body }}{% endif %}</span>
         <span class="meta"><span class="num">{{ m.created_at[11:16] }}</span>{{ status_pill(m.status) }}</span>
         {% if m.error %}<span class="err">{{ m.error }}</span>{% endif %}
       </div>
@@ -58,16 +58,32 @@
     {% else %}
     <div class="chat-empty">{{ empty('chat', 'Pick a conversation', 'Choose a patient from the list to read the thread.') }}</div>
     {% endif %}
-    {% if simulator %}
-    <form method="post" action="/webhooks/simulate-inbound" class="composer" aria-label="Simulate a patient message">
+    {% if can_reply %}
+    <form method="post" action="/messages/reply" class="composer reply" aria-label="Reply to {{ selected.title }}">
       {{ csrf_field(csrf) }}
-      <span class="sim-tag">{{ icon('alert') }} Simulate a patient message · try 1 to confirm, a score 1–5, or STOP</span>
-      <label for="s-phone" class="sr-only">Patient mobile</label>
-      <input id="s-phone" name="phone" inputmode="tel" value="{{ selected.phone if selected and selected.title != "Owner's daily report" else '' }}" placeholder="Patient mobile" required>
-      <label for="s-text" class="sr-only">Message</label>
-      <textarea id="s-text" name="text" rows="1" placeholder="Type what the patient sends…" required></textarea>
-      <button class="btn primary" type="submit" aria-label="Send as patient">{{ icon('send') }}</button>
+      <input type="hidden" name="phone" value="{{ selected.phone }}">
+      <div class="quick" role="group" aria-label="Quick replies">
+        {% for qr in quick_replies %}<button type="button" data-fill="{{ qr }}" data-target="r-text">{{ qr }}</button>{% endfor %}
+      </div>
+      <span class="reply-note">{% if window_open %}{{ icon('check', cls='ic xs') }} The patient wrote in the last 24 hours, so you can reply.{% else %}{{ icon('clock', cls='ic xs') }} Sent only if the patient has given WhatsApp consent.{% endif %}</span>
+      <label for="r-text" class="sr-only">Your reply</label>
+      <textarea id="r-text" name="text" rows="1" maxlength="1000" placeholder="Write a reply…" required></textarea>
+      <button class="btn primary" type="submit" aria-label="Send reply">{{ icon('send') }}</button>
     </form>
+    {% endif %}
+    {% if simulator %}
+    <details class="sim-box" {% if not can_reply %}open{% endif %}>
+      <summary>{{ icon('alert', cls='ic xs') }} Simulate a patient message <span class="muted">(demo only)</span></summary>
+      <form method="post" action="/webhooks/simulate-inbound" class="composer" aria-label="Simulate a patient message">
+        {{ csrf_field(csrf) }}
+        <span class="sim-tag">Try 1 to confirm, a score 1–5, or STOP. Nothing reaches a real phone.</span>
+        <label for="s-phone" class="sr-only">Patient mobile</label>
+        <input id="s-phone" name="phone" inputmode="tel" value="{{ selected.phone if selected and selected.title != "Owner's daily report" else '' }}" placeholder="Patient mobile" required>
+        <label for="s-text" class="sr-only">Message</label>
+        <textarea id="s-text" name="text" rows="1" placeholder="Type what the patient sends…" required></textarea>
+        <button class="btn" type="submit" aria-label="Send as patient">{{ icon('send') }}</button>
+      </form>
+    </details>
     {% endif %}
   </div>
 </div>

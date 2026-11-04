@@ -6,6 +6,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The product's name and descriptor, shown on every staff and patient screen, both app manifests and the API docs.
+PRODUCT_NAME = "Tec Tha Vital"
+PRODUCT_TAGLINE = "Hospital OS"
+
 
 @dataclass(frozen=True)
 class Settings:

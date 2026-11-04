@@ -1,4 +1,4 @@
-"""Demo data for Tec Tha Care Connect: two branches, a month of activity, all relative to now.
+"""Demo data for Tec Tha Vital: two branches, a month of activity, all relative to now.
 
 Run:  python -m app.seed      (wipes all data rows except staff logins and settings, then rebuilds)
 """
@@ -255,6 +255,6 @@ def seed(now: datetime | None = None) -> dict:
 
 if __name__ == "__main__":
     result = seed()
-    print("Seeded demo data for Tec Tha Care Connect:")
+    print("Seeded demo data for Tec Tha Vital:")
     for k, v in result.items():
         print(f"  {k:16} {v}")

@@ -1,4 +1,4 @@
--- Tec Tha Care Connect schema. Times are IST, stored as 'YYYY-MM-DD HH:MM:SS' text.
+-- Tec Tha Vital schema. Times are IST, stored as 'YYYY-MM-DD HH:MM:SS' text.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS branches (

@@ -87,6 +87,8 @@ STATIC_HEADERS = [
     (b"x-frame-options", b"DENY"),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
     (b"content-security-policy", CSP.encode()),
+    # Everything here sits behind a login and holds patient data: never let search engines index it.
+    (b"x-robots-tag", b"noindex, nofollow"),
 ]
 HSTS = (b"strict-transport-security", b"max-age=31536000; includeSubDomains")
 

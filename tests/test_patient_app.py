@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app import billing, db, patients, util
 from app.routes import patient_app
+from tests.flash_util import flash
 
 STATIC = Path(__file__).resolve().parent.parent / "app" / "static"
 PHONE = "9876543210"
@@ -164,14 +165,15 @@ def test_booking_and_taken_slot(client, patient):
     assert 'value="10:00"' in page.text
     token = _csrf(page.text)
     r = client.post("/my/book", data={"csrf": token, "doctor_id": doc["id"], "day": day, "slot": "10:00"}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"].startswith("/my/?msg=Booked")
+    assert r.status_code == 303 and r.headers["location"].startswith("/my/?msg=")
+    assert flash(r.headers["location"], app="patient").startswith("Booked")
     a = db.one("SELECT * FROM appointments WHERE patient_id=?", (patient["id"],))
     assert a["source"] == "Patient app" and a["status"] == "Booked" and a["starts_at"].endswith("10:00:00") and a["token_no"] == 1
     assert db.scalar("SELECT COUNT(*) FROM messages WHERE template='appt_confirmation'") == 1
     page = client.get(f"/my/book?branch=B&doctor={doc['id']}&day={day}")
     assert 'value="10:00"' not in page.text
     r = client.post("/my/book", data={"csrf": token, "doctor_id": doc["id"], "day": day, "slot": "10:00"}, follow_redirects=False)
-    assert "just%20taken" in r.headers["location"] or "just+taken" in r.headers["location"]
+    assert "just taken" in flash(r.headers["location"], "err", app="patient")
     assert db.scalar("SELECT COUNT(*) FROM appointments") == 1
 
 

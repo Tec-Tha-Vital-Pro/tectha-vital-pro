@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{% block title %}Tec Tha Care Connect{% endblock %} · {{ hospital }}</title>
+<meta name="robots" content="noindex, nofollow">
+{% block meta %}{% endblock %}
+<title>{% block title %}{{ product }}{% endblock %} · {{ hospital }}</title>
 <meta name="theme-color" content="#0e5c48" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b1512" media="(prefers-color-scheme: dark)">
-<meta name="application-name" content="Tec Tha">
+<meta name="application-name" content="{{ product }}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Tec Tha">
+<meta name="apple-mobile-web-app-title" content="{{ product }}">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
@@ -28,9 +30,9 @@
   <div class="side-brand">
     <a class="brand" href="{{ nav[0][0] if nav else '/' }}">
       <img class="mark" src="/static/icons/icon-192.png" alt="" width="36" height="36">
-      <span class="brand-text"><strong>Tec Tha</strong><small>Care Connect</small></span>
+      <span class="brand-text"><strong>{{ product }}</strong><small>{{ tagline }}</small></span>
     </a>
-    <button type="button" class="icon-btn side-toggle" data-side-toggle aria-label="Collapse menu" title="Collapse menu">{{ icon('sidebar') }}</button>
+    <button type="button" class="icon-btn side-toggle" data-side-toggle aria-label="Menu labels" aria-expanded="false" title="Show or hide menu labels">{{ icon('sidebar') }}</button>
   </div>
   <nav class="side-nav">
     {% for g in nav_groups %}
@@ -49,19 +51,19 @@
 
 <header class="top">
   <div class="top-left">
-    <a class="brand brand-compact" href="{{ nav[0][0] if nav else '/' }}" aria-label="Tec Tha home">
+    <a class="brand brand-compact" href="{{ nav[0][0] if nav else '/' }}" aria-label="{{ product }} home">
       <img class="mark" src="/static/icons/icon-192.png" alt="" width="32" height="32">
     </a>
     <div class="top-hosp">
       <strong>{{ hospital }}</strong>
-      <span class="muted">Tec Tha Care Connect</span>
+      <span class="muted">{{ product }}</span>
     </div>
   </div>
   {% if can_search %}
-  <form class="search" method="get" action="/patients" role="search">
-    <label for="g-search" class="sr-only">Search patients</label>
+  <form class="search" method="get" action="{{ search_action }}" role="search">
+    <label for="g-search" class="sr-only">{{ 'Search patients' if search_action == '/patients' else 'Find a due' }}</label>
     {{ icon('search') }}
-    <input id="g-search" name="q" type="search" placeholder="Search patients by name, mobile or TT- ID" autocomplete="off" value="{{ query.get('q', '') if path == '/patients' else '' }}">
+    <input id="g-search" name="q" type="search" placeholder="{{ 'Search patients by name, mobile or TT- ID' if search_action == '/patients' else 'Find a due: name, mobile, TT- ID or bill no.' }}" autocomplete="off" value="{{ query.get('q', '') if path == search_action else '' }}" {% if path == '/billing' and search_action == '/billing' and not query.get('q') %}autofocus{% endif %}>
   </form>
   {% endif %}
   <div class="top-right">
@@ -73,16 +75,16 @@
         <option value="">All branches</option>
         {% for b in branches %}<option value="{{ b.id }}" {% if cur_branch == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
       </select>
-      <noscript><button class="btn sm" type="submit">Show</button></noscript>
+      <button class="btn sm kbd-save" type="submit">Show</button>
     </form>
     {% endif %}
     <details class="menu user-menu">
       <summary class="avatar-btn" aria-label="Account menu for {{ user.full_name }}"><span class="avatar">{{ initials }}</span></summary>
-      <div class="menu-pop" role="menu">
+      <div class="menu-pop">
         <div class="menu-who"><strong>{{ user.full_name }}</strong><span class="muted small">{{ user.role|capitalize }}{% if user.branch_id %} · {% for b in branches if b.id == user.branch_id %}{{ b.name }}{% endfor %}{% else %} · All branches{% endif %}</span></div>
         <form method="post" action="/logout">
           <input type="hidden" name="csrf" value="{{ csrf }}">
-          <button class="menu-item" type="submit" role="menuitem">{{ icon('logout') }} Log out</button>
+          <button class="menu-item" type="submit">{{ icon('logout') }} Log out</button>
         </form>
       </div>
     </details>
@@ -92,7 +94,7 @@
 
 <main id="main" class="{% if user %}content{% else %}content bare{% endif %}" tabindex="-1">
   {% block content %}{% endblock %}
-  {% if user %}<footer class="foot">Tec Tha Care Connect · every message and change is recorded in the audit log.</footer>{% endif %}
+  {% if user %}<footer class="foot">{{ product }} · every message and change is recorded in the audit log.</footer>{% endif %}
 </main>
 
 {% if user %}
@@ -117,7 +119,9 @@
 {% endif %}
 
 <div class="toasts" aria-live="polite">
-  {% if msg %}<div class="toast ok" role="status" data-autohide>{{ icon('check') }}<span>{{ msg }}</span><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss">{{ icon('close') }}</button></div>{% endif %}
+  {% if msg %}<div class="toast ok" role="status" {% if undo %}data-autohide="30000"{% else %}data-autohide="5000"{% endif %}>{{ icon('check') }}<span>{{ msg }}</span>
+    {% if undo and user %}<form method="post" action="{{ undo.action }}" class="toast-undo"><input type="hidden" name="csrf" value="{{ csrf }}">{% for k, v in undo.fields.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}<button type="submit" class="btn sm">{{ undo.label }}</button></form>{% endif %}
+    <button type="button" class="icon-btn" data-dismiss aria-label="Dismiss">{{ icon('close') }}</button></div>{% endif %}
   {% if err %}<div class="toast bad" role="alert">{{ icon('alert') }}<span>{{ err }}</span><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss">{{ icon('close') }}</button></div>{% endif %}
 </div>
 </body>

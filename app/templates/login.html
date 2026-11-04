@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon %}
-{% block title %}Log in{% endblock %}
+{% block title %}Staff log in{% endblock %}
+{% block meta %}<meta name="description" content="Staff log in for {{ hospital }}: enquiries, appointments, billing follow-up and patient WhatsApp, by {{ product }}.">{% endblock %}
 {% block content %}
 <div class="login-wrap">
-  <section class="login-art" aria-label="About Tec Tha Care Connect">
+  <section class="login-art" aria-label="About {{ product }}">
     <div class="brand">
       <img class="mark" src="/static/icons/icon-192.png" alt="" width="40" height="40">
-      <span class="brand-text"><strong>Tec Tha</strong><small>Care Connect</small></span>
+      <span class="brand-text"><strong>{{ product }}</strong><small>{{ tagline }}</small></span>
     </div>
     <div>
       <h2>Every enquiry answered, every rupee <em>followed up</em>.</h2>
@@ -29,7 +30,7 @@
         <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn primary" type="submit">Log in</button>
       </form>
-      <p class="fine">Forgot your password? Ask the hospital's Tec Tha admin to reset it.</p>
+      <p class="fine">Forgot your password? Ask the hospital's {{ product }} admin to reset it.</p>
     </div>
   </section>
 </div>

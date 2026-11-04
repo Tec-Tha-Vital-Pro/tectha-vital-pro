@@ -1,5 +1,5 @@
 // Caches only static files. Pages with patient data are never cached.
-const CACHE = 'tt-patient-v1';
+const CACHE = 'tt-patient-v2';
 const ASSETS = ['/static/patient.css', '/static/patient.js', '/static/icons/patient-192.png', '/static/icons/patient-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

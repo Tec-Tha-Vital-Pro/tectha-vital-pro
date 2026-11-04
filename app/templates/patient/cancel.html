@@ -1,0 +1,17 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}{{ t('cancel_title') }}{% endblock %}
+{% block appbar %}<a class="backlink" href="{{ back }}">{{ icon('back') }}<span>{{ t('tab_home') if back == '/my/' else t('my_visits') }}</span></a><h1 class="appbar-title">{{ t('cancel_title') }}</h1>{% endblock %}
+{% block content %}
+<article class="card pad confirm-card">
+  <p class="confirm-q">{{ t('cancel_q', doctor=a.doctor, when=(a.starts_at|when)) }}</p>
+  <ul class="meta"><li>{{ icon('clock') }}<span>{{ a.starts_at|when }}</span></li><li>{{ icon('pin') }}<span>{{ a.branch }}</span></li></ul>
+  <p class="muted">{{ t('cancel_note') }}</p>
+</article>
+<a class="btn primary block" href="{{ back }}">{{ t('keep_visit') }}</a>
+<form method="post" action="/my/appointments/{{ a.id }}/action" class="pad-t" data-once>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  <button class="btn block ghost danger" name="action" value="cancel">{{ t('yes_cancel') }}</button>
+</form>
+{% endblock %}

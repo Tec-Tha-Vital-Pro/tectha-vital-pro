@@ -1,5 +1,6 @@
 {% extends "patient/base.html" %}
 {% from "patient/_icons.html" import icon %}
+{% from "patient/_help.html" import help_box %}
 {% block title %}Home{% endblock %}
 {% block bodyclass %}home{% endblock %}
 {% block content %}
@@ -17,7 +18,7 @@
   <div class="ticket-main">
     <div class="ticket-row">
       <span class="eyebrow">{{ nxt.specialty }}</span>
-      <span class="status {{ 'ok' if nxt.status == 'Confirmed' else '' }}">{{ 'Confirmed' if nxt.status == 'Confirmed' else 'Please confirm' }}</span>
+      <span class="status {{ 'ok' if nxt.status == 'Confirmed' else '' }}">{{ t('confirmed') if nxt.status == 'Confirmed' else t('please_confirm') }}</span>
     </div>
     <p class="ticket-doc">{{ nxt.doctor }}</p>
     <dl class="ticket-facts">
@@ -34,22 +35,22 @@
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="back" value="/my/">
   {% if nxt.status != 'Confirmed' %}
-  <button class="btn primary block" name="action" value="confirm">Yes, I'll be there</button>
+  <button class="btn primary block" name="action" value="confirm">{{ t('yes_there') }}</button>
   {% endif %}
   <div class="text-actions">
-    <button class="textbtn" name="action" value="reschedule">Change time</button>
+    <button class="textbtn" name="action" value="reschedule">{{ t('change_time') }}</button>
     <span aria-hidden="true">·</span>
-    <button class="textbtn danger" name="action" value="cancel">Cancel visit</button>
+    <a class="textbtn danger" href="/my/appointments/{{ nxt.id }}/cancel?back=/my/">{{ t('cancel_visit') }}</a>
   </div>
 </form>
 {% else %}
-<a class="btn primary block" href="/my/book">Book an appointment</a>
+<a class="btn primary block" href="/my/book">{{ t('book_appt') }}</a>
 {% endif %}
 
 {% if due_total > 0 %}
 <a class="notice" href="/my/bills">
   <span class="notice-text"><strong class="num">{{ due_total|inr }}</strong> is pending on {{ dues|length }} bill{{ 's' if dues|length != 1 }}. Pay by UPI in a minute.</span>
-  <span class="notice-cta">Pay {{ icon('chev') }}</span>
+  <span class="notice-cta">{{ t('pay', amount='')|trim }} {{ icon('chev') }}</span>
 </a>
 {% endif %}
 
@@ -61,12 +62,12 @@
 {% endif %}
 
 <nav class="shortcuts" aria-label="Shortcuts">
-  <a href="/my/book">{{ icon('book') }}<span>Book a visit</span></a>
-  <a href="/my/reports">{{ icon('reports') }}<span>Reports</span></a>
-  <a href="/my/bills">{{ icon('bills') }}<span>Bills</span></a>
-  <a href="/my/appointments">{{ icon('clock') }}<span>My visits</span></a>
+  <a href="/my/book">{{ icon('book') }}<span>{{ t('book_visit') }}</span></a>
+  <a href="/my/reports">{{ icon('reports') }}<span>{{ t('tab_reports') }}</span></a>
+  <a href="/my/bills">{{ icon('bills') }}<span>{{ t('tab_bills') }}</span></a>
+  <a href="/my/appointments">{{ icon('clock') }}<span>{{ t('my_visits') }}</span></a>
 </nav>
 
-<p class="help">{{ icon('chat') }}<span>Questions? Message {{ hospital }} on WhatsApp. The front desk replies between 8 am and 9 pm.</span></p>
+{{ help_box(t, help_wa, help_call) }}
 <p class="uid-foot">Patient ID <span class="num mono">{{ me.uid }}</span> · works at every branch</p>
 {% endblock %}

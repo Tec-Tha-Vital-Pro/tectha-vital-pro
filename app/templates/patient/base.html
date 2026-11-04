@@ -1,13 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+{% block meta %}{% endblock %}
 <meta name="theme-color" content="#0b6e4f" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0f1a18" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{ hospital }}">
-<title>{% block title %}{{ hospital }}{% endblock %} · Care</title>
+<title>{% block title %}{{ hospital }}{% endblock %} · {{ hospital }}</title>
 <link rel="manifest" href="/my/manifest.webmanifest">
 <link rel="icon" type="image/png" href="/static/icons/patient-192.png">
 <link rel="apple-touch-icon" href="/static/icons/patient-192.png">
@@ -22,7 +24,7 @@
   <div class="appbar-in">
     {% if demo %}<span class="demo-badge" title="Sample data for demonstration">Demo</span>{% endif %}
     {% block appbar %}
-    <a class="brand" href="/my/"><span class="mark" aria-hidden="true">{{ hospital[:1] }}</span><span><strong>{{ hospital }}</strong><small>Tec Tha Care Connect</small></span></a>
+    <a class="brand" href="/my/"><span class="mark" aria-hidden="true">{{ hospital[:1] }}</span><span><strong>{{ hospital }}</strong><small>{{ product }}</small></span></a>
     {% endblock %}
   </div>
 </header>
@@ -33,7 +35,7 @@
 </main>
 {% if me %}
 <nav class="tabbar" aria-label="Main">
-  {% set tabs = [('/my/', 'Home', 'home'), ('/my/book', 'Book', 'book'), ('/my/bills', 'Bills', 'bills'), ('/my/reports', 'Reports', 'reports'), ('/my/profile', 'Profile', 'profile')] %}
+  {% set tabs = [('/my/', t('tab_home'), 'home'), ('/my/book', t('tab_book'), 'book'), ('/my/bills', t('tab_bills'), 'bills'), ('/my/reports', t('tab_reports'), 'reports'), ('/my/profile', t('tab_profile'), 'profile')] %}
   {% for href, label, ic in tabs %}
   {% set active = (href == '/my/' and (path == '/my/' or path.startswith('/my/appointments') or path.startswith('/my/feedback'))) or (href != '/my/' and path.startswith(href)) %}
   <a href="{{ href }}" {% if active %}aria-current="page"{% endif %}>{{ icon(ic) }}<span>{{ label }}</span></a>

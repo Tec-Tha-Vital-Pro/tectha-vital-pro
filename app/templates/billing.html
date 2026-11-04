@@ -5,14 +5,23 @@
 <div class="page-head">
   <div class="page-title">
     <h1>Billing follow-up</h1>
-    <p class="muted">Dues to chase and services that never reached a bill. The hospital's billing software stays the source of truth.</p>
+    <p class="muted">Dues to chase and services that may not be on a bill. The hospital's billing software stays the source of truth.</p>
   </div>
+  {% if search_action != '/billing' %}
+  <form method="get" action="/billing" class="inline-filter page-search" role="search">
+    {% if f_branch and not user.branch_id %}<input type="hidden" name="branch" value="{{ f_branch }}">{% endif %}
+    <label for="b-q" class="sr-only">Find a due</label>
+    <input id="b-q" name="q" type="search" value="{{ q }}" placeholder="Name, mobile, TT- ID or bill no." autocomplete="off">
+    <button class="btn" type="submit">{{ icon('search') }} Find</button>
+  </form>
+  {% endif %}
 </div>
+{% if q %}<p class="list-note small">{{ dues|length }} due{{ 's' if dues|length != 1 }} and {{ unbilled|length }} service{{ 's' if unbilled|length != 1 }} for “{{ q }}” · <a href="/billing{% if f_branch and not user.branch_id %}?branch={{ f_branch }}{% endif %}">Show all</a></p>{% endif %}
 
-<div class="kpi-strip two">
+{% if not q %}<div class="kpi-strip two">
   <div class="kpi-cell"><span class="label">Outstanding dues</span><span class="v num">{{ total_due|inr }}</span><span class="d">{{ dues|length }} bill{{ 's' if dues|length != 1 }} with a balance</span></div>
-  <div class="kpi-cell {{ 'bad' if total_unbilled }}"><span class="label">Possibly unbilled</span><span class="v num">{{ total_unbilled|inr }}</span><span class="d">{{ unbilled|length }} service{{ 's' if unbilled|length != 1 }} with no bill line</span></div>
-</div>
+  <div class="kpi-cell {{ 'bad' if total_unbilled }}"><span class="label">May not be on a bill</span><span class="v num">{{ total_unbilled|inr }}</span><span class="d">{{ unbilled|length }} service{{ 's' if unbilled|length != 1 }} with no bill line</span></div>
+</div>{% endif %}
 
 <section class="sec" aria-labelledby="dues-h">
   <div class="sec-head">
@@ -26,7 +35,7 @@
       {% for d in dues %}
       <tr>
         <td class="num mono-id" data-label="Bill">{{ d.bill_no }}</td>
-        <td class="lead-cell"><span class="name-link">{{ d.patient_name or d.name }}</span><span class="sub"><span class="uid-sm">{{ d.uid }}</span> · <span class="num">+{{ d.phone[:2] }} {{ d.phone[2:7] }} {{ d.phone[7:] }}</span></span></td>
+        <td class="lead-cell">{% if search_action == '/patients' %}<a class="name-link" href="/patients/{{ d.patient_id }}">{{ d.patient_name or d.name }}</a>{% else %}<span class="name-link">{{ d.patient_name or d.name }}</span>{% endif %}<span class="sub"><span class="uid-sm">{{ d.uid }}</span> · <span class="num">{{ d.phone|phone }}</span></span></td>
         <td data-label="Branch">{% for b in branches if b.id == d.branch_id %}{{ b.name }}{% endfor %}</td>
         <td class="r num" data-label="Balance"><strong>{{ d.balance|inr }}</strong></td>
         <td class="r num" data-label="Age"><span class="age {{ 'bad' if d.age_days > 45 else ('warn' if d.age_days > 14 else '') }}">{{ d.age_days }} days</span></td>
@@ -35,36 +44,44 @@
           {% if not readonly %}
           <form method="post" action="/billing/{{ d.id }}/remind">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ icon('send') }} Send reminder now</button></form>
           <button type="button" class="btn sm primary" data-open="pay-{{ d.id }}">Record payment</button>
-          <dialog id="pay-{{ d.id }}" class="slide" aria-labelledby="pay-h-{{ d.id }}">
-            <div class="dlg-head"><h2 id="pay-h-{{ d.id }}">Record payment</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
-            <div class="dlg-body">
-              <dl class="facts">
-                <div><dt>Bill</dt><dd class="num">{{ d.bill_no }}</dd></div>
-                <div><dt>Patient</dt><dd>{{ d.patient_name or d.name }} · {{ d.uid }}</dd></div>
-                <div><dt>Balance</dt><dd class="num"><strong>{{ d.balance|inr }}</strong></dd></div>
-              </dl>
-              <form method="post" action="/billing/{{ d.id }}/payment" class="stack">
-                {{ csrf_field(csrf) }}
-                <label for="amt-{{ d.id }}">Amount received (₹)<input id="amt-{{ d.id }}" name="amount" type="number" min="1" max="{{ d.balance }}" value="{{ d.balance }}" class="amt" inputmode="numeric"></label>
-                <label for="mode-{{ d.id }}">Mode<select id="mode-{{ d.id }}" name="mode">{% for m in modes %}<option>{{ m }}</option>{% endfor %}</select></label>
-                <button class="btn primary" type="submit">Save payment</button>
-              </form>
-            </div>
-          </dialog>
           {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr class="empty-row"><td colspan="7" class="empty-cell">{{ empty('rupee', 'No pending dues', 'Every bill is fully paid. New balances appear when the billing software sends bills or a CSV is imported.') }}</td></tr>
+      <tr class="empty-row"><td colspan="7" class="empty-cell">{% if q %}{{ empty('search', 'No due matches “' ~ q ~ '”', 'Try the last 5 digits of the mobile number, the TT- ID, or the bill number printed on the bill.') }}{% else %}{{ empty('rupee', 'No pending dues', 'Every bill is fully paid. New balances appear when the billing software sends bills or a CSV is imported.') }}{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
 
+{% if not readonly %}
+{# Payment dialogs live outside the table so phone card styles never reach them (M1). #}
+{% for d in dues %}
+{% set perr = pay_err if pay_err and pay_err.id == d.id else {} %}
+<dialog id="pay-{{ d.id }}" class="slide" aria-labelledby="pay-h-{{ d.id }}" {% if open_dialog == 'pay-' ~ d.id %}data-open-on-load{% endif %}>
+  <div class="dlg-head"><h2 id="pay-h-{{ d.id }}">Record payment</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+  <div class="dlg-body">
+    <dl class="facts">
+      <div><dt>Bill</dt><dd class="num">{{ d.bill_no }}</dd></div>
+      <div><dt>Patient</dt><dd>{{ d.patient_name or d.name }} · {{ d.uid }}</dd></div>
+      <div><dt>Balance</dt><dd class="num"><strong>{{ d.balance|inr }}</strong></dd></div>
+    </dl>
+    <form method="post" action="/billing/{{ d.id }}/payment" class="stack">
+      {{ csrf_field(csrf) }}
+      <label for="amt-{{ d.id }}">Amount received (₹)<input id="amt-{{ d.id }}" name="amount" type="number" min="1" max="{{ d.balance }}" value="{{ perr.amount if perr else d.balance }}" class="amt" inputmode="numeric" {% if perr %}aria-invalid="true" aria-describedby="amt-{{ d.id }}-err"{% endif %}></label>
+      {% if perr %}<p class="field-err" id="amt-{{ d.id }}-err" role="alert">{{ icon('alert', cls='ic xs') }} {{ perr.text }}</p>{% endif %}
+      <label for="mode-{{ d.id }}">Mode<select id="mode-{{ d.id }}" name="mode">{% for m in modes %}<option {% if perr and perr.mode == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+      <button class="btn primary" type="submit">Save payment</button>
+    </form>
+  </div>
+</dialog>
+{% endfor %}
+{% endif %}
+
 <section class="sec" id="unbilled" aria-labelledby="unb-h">
   <div class="sec-head">
-    <h2 id="unb-h">Possibly unbilled services</h2>
+    <h2 id="unb-h">Services that may not be on a bill</h2>
     <span class="muted small">Done in lab, pharmacy or ward with no matching line on any bill. Check the case sheet, then add.</span>
   </div>
   <div class="tbl-wrap cards">

@@ -13,14 +13,18 @@
   </section>
 
   <section class="sec" aria-labelledby="st-names">
-    <div class="sec-head"><h2 id="st-names">Hospital and branches</h2></div>
+    <div class="sec-head"><h2 id="st-names">Hospital, branches and help contacts</h2></div>
     <form method="post" action="/settings/names" class="stack">
       {{ csrf_field(csrf) }}
       <label for="s-h">Hospital name<input id="s-h" name="hospital_name" value="{{ hospital }}" required></label>
       <div class="two-col">
       {% for b in branches %}<label for="s-b{{ b.id }}">Branch {{ b.id }}<input id="s-b{{ b.id }}" name="branch_{{ b.id }}" value="{{ b.name }}"></label>{% endfor %}
       </div>
-      <div><button class="btn" type="submit">Save names</button></div>
+      <div class="two-col">
+        <label for="s-wa">Hospital WhatsApp <span class="hint">shown to patients for help</span><input id="s-wa" name="hospital_whatsapp" value="{{ hospital_whatsapp[2:] if hospital_whatsapp else '' }}" placeholder="98765 43210" inputmode="numeric" pattern="[0-9 +]{10,15}" maxlength="15"></label>
+        <label for="s-fd">Front desk phone <span class="hint">for "Call the front desk"</span><input id="s-fd" name="front_desk_phone" value="{{ front_desk_phone[2:] if front_desk_phone else '' }}" placeholder="98765 43210" inputmode="numeric" pattern="[0-9 +]{10,15}" maxlength="15"></label>
+      </div>
+      <div><button class="btn" type="submit">Save</button></div>
     </form>
   </section>
 </div>

@@ -1,20 +1,29 @@
 {% extends "patient/base.html" %}
 {% from "patient/_icons.html" import icon %}
-{% block title %}Bills{% endblock %}
-{% block appbar %}<h1 class="appbar-title solo">Bills</h1>{% endblock %}
+{% from "patient/_help.html" import help_box %}
+{% block title %}{{ t('tab_bills') }}{% endblock %}
+{% block appbar %}<h1 class="appbar-title solo">{{ t('tab_bills') }}</h1>{% endblock %}
 {% block content %}
 <div class="card pad total {{ 'warn' if due_total > 0 else 'ok' }}">
-  <span class="label">{{ 'To pay' if due_total > 0 else 'All paid' }}</span>
+  <span class="label">{{ t('to_pay')|capitalize if due_total > 0 else t('all_paid') }}</span>
   <strong class="big num">{{ due_total|inr }}</strong>
 </div>
 <div class="card list">
 {% for b in bills %}
+  {% if b.balance > 0 %}
+  <div class="list-row bill-due">
+    <a class="bill-main" href="/my/bills/{{ b.id }}"><strong class="num due-amt">{{ b.balance|inr }} <span class="due-word">{{ t('to_pay') }}</span></strong><p class="muted small">{{ t('total', amount=(b.total|inr)) }} · {{ b.created_at|day }} · {{ b.branch }} · <span class="num">{{ b.bill_no }}</span></p></a>
+    <a class="btn primary sm" href="/my/bills/{{ b.id }}/pay">{{ t('pay', amount=(b.balance|inr)) }}</a>
+  </div>
+  {% else %}
   <a class="list-row link" href="/my/bills/{{ b.id }}">
     <div><strong class="num">{{ b.total|inr }}</strong><p class="muted small">{{ b.created_at|day }} · {{ b.branch }} · <span class="num">{{ b.bill_no }}</span></p></div>
-    <span class="row-end">{% if b.balance > 0 %}<span class="pill warn num">{{ b.balance|inr }} due</span>{% else %}<span class="pill ok">Paid</span>{% endif %}{{ icon('chev') }}</span>
+    <span class="row-end"><span class="pill ok">{{ t('paid') }}</span>{{ icon('chev') }}</span>
   </a>
+  {% endif %}
 {% else %}
   <p class="pad muted">No bills yet.</p>
 {% endfor %}
 </div>
+{% if due_total > 0 %}{{ help_box(t, help_wa, help_call) }}{% endif %}
 {% endblock %}

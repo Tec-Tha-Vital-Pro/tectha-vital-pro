@@ -1,4 +1,5 @@
 """Staff screens (server-rendered). Every page needs a login; every POST checks the CSRF token."""
+import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
@@ -7,12 +8,15 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.routing import APIRoute
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from app import audit, auth, config, db, metrics, patients, security, util
 from app.auth import ADMIN, BILLING, BILLING_VIEW, CLINICAL, FRONT, OWNER_VIEW, STAFF
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 TEMPLATES.env.filters["inr"] = util.inr
+TEMPLATES.env.globals["product"] = config.PRODUCT_NAME
+TEMPLATES.env.globals["tagline"] = config.PRODUCT_TAGLINE
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
@@ -125,13 +129,18 @@ def render(request: Request, name: str, user: dict | None, status_code: int = 20
         "user": user, "nav": [(it["href"], it["label"]) for it in items], "nav_groups": groups,
         "tabs": tabs, "more": more, "more_active": any(it["active"] for it in more),
         "path": path, "hospital": _hospital(), "initials": initials,
-        "branches": _branches(), "msg": request.query_params.get("msg"), "err": request.query_params.get("err"),
+        "branches": _branches(),
         "csrf": user["csrf"] if user else "",
         "branch_aware": bool(user and not user["branch_id"] and path in BRANCH_AWARE),
         "cur_branch": request.query_params.get("branch", ""),
-        "can_search": bool(user and user["role"] in CLINICAL),
-        "query": dict(request.query_params),
+        "can_search": bool(user and (user["role"] in CLINICAL or user["role"] in BILLING_VIEW)),
+        "search_action": "/patients" if user and user["role"] in CLINICAL else "/billing",
+        "query": {k: v for k, v in request.query_params.items() if k not in ("msg", "err")},
     }
+    ok, bad = read_flash(request.query_params.get("msg")), read_flash(request.query_params.get("err"))
+    base["msg"] = ok["t"] if ok else None
+    base["undo"] = ok.get("u") if ok else None
+    base["err"] = bad["t"] if bad else None
     base.update(ctx)
     return TEMPLATES.TemplateResponse(request, name, base, status_code=status_code)
 
@@ -140,14 +149,63 @@ def _error(request: Request, code: int, title: str, detail: str) -> HTMLResponse
     return render(request, "error.html", auth.current_user(request), status_code=code, title=title, detail=detail, code=code)
 
 
-def back(path: str, msg: str | None = None, err: str | None = None) -> RedirectResponse:
+def not_found_page(request: Request) -> HTMLResponse:
+    """Used by the app-wide 404 handler for mistyped staff addresses."""
+    return _error(request, 404, "Page not found", "Check the address, or go back to your start screen.")
+
+
+# ---------- flash messages
+# Toast text is never read from the URL as-is: back() signs it, and render() shows only text this
+# server signed in the last 5 minutes. A crafted link (?err=Your account is blocked…) shows nothing.
+FLASH_MAX_AGE = 300
+
+
+def _flash_signer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(config.settings.session_secret, salt="tt-staff-flash")
+
+
+def flash_token(text: str, undo: dict | None = None) -> str:
+    return _flash_signer().dumps({"t": text, "u": undo} if undo else {"t": text})
+
+
+def read_flash(token: str | None) -> dict | None:
+    if not token:
+        return None
+    try:
+        data = _flash_signer().loads(token, max_age=FLASH_MAX_AGE)
+    except BadSignature:
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("t"), str) else None
+
+
+def back(path: str, msg: str | None = None, err: str | None = None, undo: dict | None = None) -> RedirectResponse:
+    """Redirect after a POST with a signed toast. undo = {"action": url, "fields": {...}, "label": "Undo"}."""
     q = []
     if msg:
-        q.append("msg=" + quote(msg))
+        q.append("msg=" + quote(flash_token(msg, undo)))
     if err:
-        q.append("err=" + quote(err))
+        q.append("err=" + quote(flash_token(err)))
     sep = "&" if "?" in path else "?"
     return RedirectResponse(path + (sep + "&".join(q) if q else ""), status_code=303)
+
+
+def fmt_phone(phone: str | None) -> str:
+    """91XXXXXXXXXX -> +91 XXXXX XXXXX (the format used on every screen)."""
+    d = "".join(c for c in (phone or "") if c.isdigit())
+    if len(d) == 12 and d.startswith("91"):
+        return f"+91 {d[2:7]} {d[7:]}"
+    return phone or ""
+
+
+TEMPLATES.env.filters["phone"] = fmt_phone
+PHONE_HELP = "Enter a 10-digit mobile number, for example 98765 43210."
+
+
+def _phone_or_none(raw: str) -> str | None:
+    try:
+        return util.normalize_phone(raw)
+    except ValueError:
+        return None
 
 
 def _scope(user: dict, requested: str | None) -> str | None:
@@ -308,14 +366,13 @@ def dashboard(request: Request, branch: str | None = None):
     return render(request, "dashboard.html", user, branch=br, today=today, yday=yday, k_today=k_today, k_yday=k_yday,
                   k_prev=k_prev, prev_day=yday - timedelta(days=1),
                   chart=chart, steps=steps, fun=fun, speed=metrics.reply_speed(today, br),
-                  attention=metrics.attention(br), report=report)
+                  attention=dict(metrics.attention(br), claims_stuck=claims_over_limit(br)), report=report)
 
 
 # ---------------------------------------------------------------- leads
 
-@router.get("/leads", response_class=HTMLResponse)
-def leads_page(request: Request, source: str = "", status: str = "", branch: str = ""):
-    user = auth.require(request, FRONT)
+def _leads_view(request: Request, user: dict, source: str = "", status: str = "", branch: str = "",
+                status_code: int = 200, **extra) -> HTMLResponse:
     br = _scope(user, branch)
     sql = ("SELECT l.*, b.name AS branch_name FROM leads l LEFT JOIN branches b ON b.id=l.branch_id WHERE 1=1")
     params: list = []
@@ -329,26 +386,39 @@ def leads_page(request: Request, source: str = "", status: str = "", branch: str
         sql += " AND l.branch_id = ?"
         params.append(br)
     rows = db.query(sql + " ORDER BY l.created_at DESC LIMIT 300", tuple(params))
-    return render(request, "leads.html", user, rows=rows, sources=LEAD_SOURCES, statuses=LEAD_STATUSES,
-                  f_source=source, f_status=status, f_branch=br or "")
+    ctx = {"rows": rows, "sources": LEAD_SOURCES, "statuses": LEAD_STATUSES, "f_source": source, "f_status": status,
+           "f_branch": br or "", "form": {}, "errors": {}, "open_dialog": ""}
+    ctx.update(extra)
+    return render(request, "leads.html", user, status_code=status_code, **ctx)
+
+
+@router.get("/leads", response_class=HTMLResponse)
+def leads_page(request: Request, source: str = "", status: str = "", branch: str = ""):
+    user = auth.require(request, FRONT)
+    return _leads_view(request, user, source, status, branch)
 
 
 @router.post("/leads")
-async def lead_add(request: Request, name: str = Form(...), phone: str = Form(...), need: str = Form(""),
-                   source: str = Form(...), branch_id: str = Form("")):
+async def lead_add(request: Request, name: str = Form(""), phone: str = Form(""), need: str = Form(""),
+                   source: str = Form(""), branch_id: str = Form("")):
     user = await auth.require_post(request, FRONT)
-    try:
-        phone_n = util.normalize_phone(phone)
-    except ValueError as e:
-        return back("/leads", err=str(e))
+    form = {"name": name.strip(), "phone": phone.strip(), "need": need.strip(), "source": source, "branch_id": branch_id}
+    errors = {}
+    if not form["name"]:
+        errors["name"] = "Enter the name."
+    phone_n = _phone_or_none(phone)
+    if phone_n is None:
+        errors["phone"] = PHONE_HELP
     if source not in LEAD_SOURCES:
-        return back("/leads", err="Choose a valid source.")
+        errors["source"] = "Choose where the enquiry came from."
+    if errors:
+        return _leads_view(request, user, status_code=400, form=form, errors=errors, open_dialog="new-lead")
     br = user["branch_id"] or (branch_id if branch_id in {b["id"] for b in _branches()} else None)
     now = util.ts(util.now())
     lid = db.execute("INSERT INTO leads(name, phone, need, source, branch_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-                     (name.strip(), phone_n, need.strip(), source, br, now, now))
+                     (form["name"], phone_n, form["need"], source, br, now, now))
     audit.log(auth.actor(user), "create", "lead", lid, {"source": source})
-    return back("/leads", msg=f"Enquiry from {name.strip()} added.")
+    return back("/leads", msg=f"Enquiry from {form['name']} added.")
 
 
 @router.post("/leads/{lead_id}/status")
@@ -357,6 +427,8 @@ async def lead_status(request: Request, lead_id: int, status: str = Form(...)):
     lead = _own(user, "leads", lead_id)
     if status not in LEAD_STATUSES:
         return back("/leads", err="Unknown status.")
+    if status == lead["status"]:
+        return back("/leads", msg=f"{lead['name']} is already {status}.")
     now = util.now()
     first = lead["first_reply_seconds"]
     if first is None and status != "New":
@@ -364,50 +436,95 @@ async def lead_status(request: Request, lead_id: int, status: str = Form(...)):
     db.execute("UPDATE leads SET status = ?, first_reply_seconds = ?, updated_at = ? WHERE id = ?",
                (status, first, util.ts(now), lead_id))
     audit.log(auth.actor(user), "status", "lead", lead_id, {"from": lead["status"], "to": status})
-    return back("/leads", msg=f"{lead['name']}: {status}.")
+    return back("/leads", msg=f"{lead['name']}: {status}.",
+                undo={"action": f"/leads/{lead_id}/status", "fields": {"status": lead["status"]}, "label": "Undo"})
 
 
-# ---------------------------------------------------------------- appointments
+APPT_LABELS = {"Booked": "Not confirmed", "Confirmed": "Confirmed", "Visited": "Seen", "NoShow": "No-show",
+               "Cancelled": "Cancelled"}
+APPT_FILTERS = [("", "All"), ("unconfirmed", "Not confirmed"), ("upcoming", "Still to come"), ("seen", "Seen")]
 
-@router.get("/appointments", response_class=HTMLResponse)
-def appointments_page(request: Request, day: str = "", branch: str = ""):
-    user = auth.require(request, CLINICAL)
-    try:
-        d = date.fromisoformat(day) if day else util.now().date()
-    except ValueError:
-        d = util.now().date()
-    br = _scope(user, branch)
+
+def _appointments_view(request: Request, user: dict, d: date, br: str | None, show: str = "",
+                       status_code: int = 200, **extra) -> HTMLResponse:
     f, p = _branch_sql("a.branch_id", br)
     rows = db.query(
         "SELECT a.*, pt.name, pt.phone, pt.uid, pt.id AS pid, dr.name AS doctor, dr.specialty, b.name AS branch_name"
         " FROM appointments a JOIN patients pt ON pt.id=a.patient_id JOIN doctors dr ON dr.id=a.doctor_id"
         f" JOIN branches b ON b.id=a.branch_id WHERE date(a.starts_at) = ?{f} ORDER BY a.starts_at, a.token_no",
         (d.isoformat(), *p))
-    fd, pd = _branch_sql("branch_id", br)
-    doctors = db.query(f"SELECT d.*, b.name AS branch_name FROM doctors d JOIN branches b ON b.id=d.branch_id WHERE 1=1{fd.replace('branch_id','d.branch_id')} ORDER BY d.name", pd)
-    default_time = (util.now() + timedelta(hours=1)).replace(minute=0).strftime("%Y-%m-%dT%H:%M")
-    return render(request, "appointments.html", user, rows=rows, day=d, doctors=doctors, f_branch=br or "",
-                  prev=(d - timedelta(days=1)).isoformat(), next_day=(d + timedelta(days=1)).isoformat(),
-                  default_time=default_time)
+    counts = {"": len(rows), "unconfirmed": sum(r["status"] == "Booked" for r in rows),
+              "upcoming": sum(r["status"] in ("Booked", "Confirmed") for r in rows),
+              "seen": sum(r["status"] == "Visited" for r in rows)}
+    keep = {"unconfirmed": ("Booked",), "upcoming": ("Booked", "Confirmed"), "seen": ("Visited",)}.get(show)
+    shown = [r for r in rows if keep is None or r["status"] in keep]
+    fd, pd = _branch_sql("d.branch_id", br)
+    doctors = db.query(f"SELECT d.*, b.name AS branch_name FROM doctors d JOIN branches b ON b.id=d.branch_id"
+                       f" WHERE 1=1{fd} ORDER BY b.id, d.name", pd)
+    groups: list[dict] = []
+    for doc in doctors:
+        if not groups or groups[-1]["branch"] != doc["branch_name"]:
+            groups.append({"branch": doc["branch_name"], "doctors": []})
+        groups[-1]["doctors"].append(doc)
+    now = util.now()
+    ctx = {"rows": shown, "counts": counts, "show": show, "filters": APPT_FILTERS, "labels": APPT_LABELS,
+           "day": d, "doctor_groups": groups, "f_branch": br or "", "multi_branch": not br and len(_branches()) > 1,
+           "prev": (d - timedelta(days=1)).isoformat(), "next_day": (d + timedelta(days=1)).isoformat(),
+           "now_time": now.strftime("%Y-%m-%dT%H:%M"),
+           "default_time": (now + timedelta(minutes=15 - now.minute % 15)).strftime("%Y-%m-%dT%H:%M"),
+           "form": {}, "errors": {}, "open_dialog": ""}
+    ctx.update(extra)
+    return render(request, "appointments.html", user, status_code=status_code, **ctx)
+
+
+def _day(day: str) -> date:
+    try:
+        return date.fromisoformat(day) if day else util.now().date()
+    except ValueError:
+        return util.now().date()
+
+
+@router.get("/appointments", response_class=HTMLResponse)
+def appointments_page(request: Request, day: str = "", branch: str = "", show: str = "",
+                      book: str = "", name: str = "", phone: str = ""):
+    user = auth.require(request, CLINICAL)
+    extra = {}
+    if book == "1":
+        # Arriving from an enquiry: open the booking form with the name and number filled in (no re-typing).
+        p = _phone_or_none(phone)
+        extra = {"open_dialog": "book", "form": {"name": name[:120], "phone": p[2:] if p else phone[:15]}}
+    return _appointments_view(request, user, _day(day), _scope(user, branch),
+                              show if show in dict(APPT_FILTERS) else "", **extra)
 
 
 @router.post("/appointments/book")
-async def appointment_book(request: Request, name: str = Form(...), phone: str = Form(...), doctor_id: int = Form(...),
-                           starts_at: str = Form(...), consent: str = Form("")):
+async def appointment_book(request: Request, name: str = Form(""), phone: str = Form(""), doctor_id: str = Form(""),
+                           starts_at: str = Form(""), consent: str = Form("")):
     user = await auth.require_post(request, CLINICAL)
-    doc = db.one("SELECT * FROM doctors WHERE id = ?", (doctor_id,))
+    form = {"name": name.strip(), "phone": phone.strip(), "doctor_id": doctor_id, "starts_at": starts_at,
+            "consent": consent == "1"}
+    errors: dict[str, str] = {}
+    if not form["name"]:
+        errors["name"] = "Enter the patient's name."
+    phone_n = _phone_or_none(phone)
+    if phone_n is None:
+        errors["phone"] = PHONE_HELP
+    doc = db.one("SELECT * FROM doctors WHERE id = ?", (int(doctor_id),)) if doctor_id.isdigit() else None
     if doc is None:
-        return back("/appointments", err="Choose a doctor.")
-    if user["branch_id"] and doc["branch_id"] != user["branch_id"]:
+        errors["doctor_id"] = "Choose a doctor."
+    elif user["branch_id"] and doc["branch_id"] != user["branch_id"]:
         raise auth.Forbidden()
     try:
         when = datetime.strptime(starts_at, "%Y-%m-%dT%H:%M")
     except ValueError:
-        return back("/appointments", err="Pick a valid date and time.")
-    try:
-        p = patients.find_or_create(name, phone, consent=True if consent == "1" else None, actor=auth.actor(user))
-    except ValueError as e:
-        return back("/appointments", err=str(e))
+        when = None
+        errors["starts_at"] = "Pick a date and time."
+    if errors:
+        # Keep everything that was typed and reopen the form with the problem marked (B1).
+        d = when.date() if when else util.now().date()
+        return _appointments_view(request, user, d, _scope(user, ""), status_code=400, form=form, errors=errors,
+                                  open_dialog="book")
+    p = patients.find_or_create(form["name"], phone_n, consent=True if form["consent"] else None, actor=auth.actor(user))
     token = (db.scalar("SELECT COALESCE(MAX(token_no),0) FROM appointments WHERE branch_id = ? AND date(starts_at) = ?",
                        (doc["branch_id"], when.date().isoformat())) or 0) + 1
     aid = db.execute(
@@ -417,8 +534,9 @@ async def appointment_book(request: Request, name: str = Form(...), phone: str =
     db.execute("UPDATE leads SET status='Booked', patient_id=?, updated_at=? WHERE phone=? AND status IN ('New','Contacted')",
                (p["id"], util.ts(util.now()), p["phone"]))
     audit.log(auth.actor(user), "create", "appointment", aid, {"patient": p["uid"], "token": token})
+    wa = "" if p["consent_messages"] else " No WhatsApp sent: consent not given."
     return back(f"/appointments?day={when.date().isoformat()}",
-                msg=f"Booked {p['name']} ({p['uid']}) with {doc['name']}, token {token}.")
+                msg=f"Booked {p['name']} ({p['uid']}) with {doc['name']}, token {doc['branch_id']}-{token}.{wa}")
 
 
 @router.post("/appointments/{appt_id}/status")
@@ -429,7 +547,11 @@ async def appointment_status(request: Request, appt_id: int, status: str = Form(
         return back("/appointments", err="Unknown status.")
     db.execute("UPDATE appointments SET status = ? WHERE id = ?", (status, appt_id))
     audit.log(auth.actor(user), "status", "appointment", appt_id, {"from": a["status"], "to": status})
-    return back(f"/appointments?day={a['starts_at'][:10]}", msg=f"Token {a['token_no']}: {status}.")
+    undo = None
+    if status in ("NoShow", "Cancelled") and a["status"] != status:
+        undo = {"action": f"/appointments/{appt_id}/status", "fields": {"status": a["status"]}, "label": "Undo"}
+    return back(f"/appointments?day={a['starts_at'][:10]}",
+                msg=f"Token {a['branch_id']}-{a['token_no']}: {APPT_LABELS.get(status, status)}.", undo=undo)
 
 
 # ---------------------------------------------------------------- patients
@@ -487,19 +609,47 @@ async def patient_consent(request: Request, patient_id: int, consent: str = Form
 
 # ---------------------------------------------------------------- billing
 
-@router.get("/billing", response_class=HTMLResponse)
-def billing_page(request: Request, branch: str = ""):
-    user = auth.require(request, BILLING_VIEW)
+def _matches(q: str, *, name: str | None, uid: str | None, phone: str | None, bill_no: str | None = None) -> bool:
+    """Counter search: part of the name, TT- ID, bill number, or 5+ digits of the mobile."""
+    ql = q.lower()
+    digits = "".join(c for c in q if c.isdigit())
+    if name and ql in name.lower():
+        return True
+    if uid and ql in uid.lower():
+        return True
+    if bill_no and ql in bill_no.lower():
+        return True
+    return bool(len(digits) >= 5 and phone and digits in phone)
+
+
+def _billing_view(request: Request, user: dict, branch: str = "", q: str = "", status_code: int = 200,
+                  **extra) -> HTMLResponse:
     from app import billing
     br = _scope(user, branch)
+    q = q.strip()
     dues = billing.dues(branch=br)
     f, p = _branch_sql("o.branch_id", br)
     unbilled = db.query(
-        "SELECT o.*, pt.name, pt.uid, b.name AS branch_name FROM orders o JOIN patients pt ON pt.id=o.patient_id"
+        "SELECT o.*, pt.name, pt.uid, pt.phone, b.name AS branch_name FROM orders o JOIN patients pt ON pt.id=o.patient_id"
         f" JOIN branches b ON b.id=o.branch_id WHERE o.bill_id IS NULL{f} ORDER BY o.created_at", p)
-    return render(request, "billing.html", user, dues=dues, unbilled=unbilled, f_branch=br or "", modes=PAY_MODES,
-                  readonly=user["role"] not in BILLING,
-                  total_due=sum(d["balance"] for d in dues), total_unbilled=sum(o["amount"] for o in unbilled))
+    total_due, total_unbilled = sum(d["balance"] for d in dues), sum(o["amount"] for o in unbilled)
+    if q:
+        dues = [d for d in dues if _matches(q, name=d.get("patient_name") or d.get("name"), uid=d.get("uid"),
+                                            phone=d.get("phone"), bill_no=d.get("bill_no"))]
+        unbilled = [o for o in unbilled if _matches(q, name=o["name"], uid=o["uid"], phone=o["phone"])]
+    readonly = user["role"] not in BILLING
+    ctx = {"dues": dues, "unbilled": unbilled, "f_branch": br or "", "modes": PAY_MODES, "readonly": readonly,
+           "total_due": total_due, "total_unbilled": total_unbilled, "q": q, "open_dialog": "", "pay_err": {}}
+    if q and len(dues) == 1 and not readonly:
+        ctx["open_dialog"] = f"pay-{dues[0]['id']}"     # the patient at the counter: straight to Record payment
+    ctx.update(extra)
+    return render(request, "billing.html", user, status_code=status_code, **ctx)
+
+
+@router.get("/billing", response_class=HTMLResponse)
+def billing_page(request: Request, branch: str = "", q: str = ""):
+    user = auth.require(request, BILLING_VIEW)
+    return _billing_view(request, user, branch, q)
 
 
 @router.post("/billing/{bill_id}/remind")
@@ -521,17 +671,28 @@ async def billing_remind(request: Request, bill_id: int):
 
 
 @router.post("/billing/{bill_id}/payment")
-async def billing_payment(request: Request, bill_id: int, amount: int = Form(...), mode: str = Form(...)):
+async def billing_payment(request: Request, bill_id: int, amount: str = Form(""), mode: str = Form("")):
     user = await auth.require_post(request, BILLING)
     from app import billing
-    _own(user, "bills", bill_id)
-    if amount <= 0 or mode not in PAY_MODES:
-        return back("/billing", err="Enter an amount above zero and a payment mode.")
-    try:
-        billing.record_payment(bill_id, amount, mode, actor=auth.actor(user))
-    except (ValueError, LookupError) as e:
-        return back("/billing", err=str(e))
-    return back("/billing", msg=f"Payment of {util.inr(amount)} recorded.")
+    bill = _own(user, "bills", bill_id)
+    balance = bill["total"] - bill["paid"]
+    err = None
+    amt = int(amount) if amount.strip().isdigit() else 0
+    if amt <= 0:
+        err = "Enter the amount received, in rupees."
+    elif amt > balance:
+        err = f"That is more than the balance of {util.inr(balance)}."
+    elif mode not in PAY_MODES:
+        err = "Choose how the patient paid."
+    if err is None:
+        try:
+            billing.record_payment(bill_id, amt, mode, actor=auth.actor(user))
+        except (ValueError, LookupError) as e:
+            err = str(e)
+    if err:
+        return _billing_view(request, user, status_code=400, open_dialog=f"pay-{bill_id}",
+                             pay_err={"id": bill_id, "text": err, "amount": amount, "mode": mode})
+    return back("/billing", msg=f"Payment of {util.inr(amt)} recorded for bill {bill['bill_no']}.")
 
 
 @router.post("/billing/orders/{order_id}/add")
@@ -549,20 +710,45 @@ async def billing_add_order(request: Request, order_id: int):
 
 # ---------------------------------------------------------------- claims
 
+# IRDAI 2024: cashless pre-auth decided within 1 hour; final discharge approval within 3 hours.
+CLAIM_LIMIT_MIN = {"PreAuthRequested": 60, "FinalSent": 180}
+
+
+def _dur(mins: int) -> str:
+    if mins < 60:
+        return f"{mins} min"
+    if mins < 48 * 60:
+        return f"{mins // 60} h {mins % 60:02d} m"
+    return f"{mins // 1440} days"
+
+
+def claims_over_limit(branch: str | None) -> int:
+    """Claims waiting longer than the IRDAI limit for their stage, from time in stage."""
+    f, p = _branch_sql("branch_id", branch)
+    now = util.now()
+    n = 0
+    for stage, limit in CLAIM_LIMIT_MIN.items():
+        n += db.scalar(f"SELECT COUNT(*) FROM claims WHERE stage = ? AND stage_changed_at < ?{f}",
+                       (stage, util.ts(now - timedelta(minutes=limit)), *p))
+    return n
+
 @router.get("/claims", response_class=HTMLResponse)
 def claims_page(request: Request, branch: str = ""):
     user = auth.require(request, BILLING_VIEW)
     br = _scope(user, branch)
     f, p = _branch_sql("c.branch_id", br)
     rows = db.query(
-        "SELECT c.*, pt.name, pt.uid, b.name AS branch_name,"
-        " EXISTS (SELECT 1 FROM tasks t WHERE t.kind='claim_stuck' AND t.status='Open' AND t.related_type='claim' AND t.related_id=c.id) AS stuck"
+        "SELECT c.*, pt.name, pt.uid, b.name AS branch_name"
         " FROM claims c JOIN patients pt ON pt.id=c.patient_id JOIN branches b ON b.id=c.branch_id"
         f" WHERE 1=1{f} ORDER BY c.stage_changed_at", p)
     now = util.now()
     for r in rows:
         mins = int((now - util.parse(r["stage_changed_at"])).total_seconds() // 60)
-        r["waiting"] = f"{mins // 60} h {mins % 60:02d} m" if mins < 48 * 60 else f"{mins // 1440} days"
+        r["waiting"] = _dur(mins)
+        limit = CLAIM_LIMIT_MIN.get(r["stage"])
+        # Past the limit is worked out from time in stage, never from whether a task exists (M9).
+        r["stuck"] = bool(limit and mins > limit)
+        r["over"] = _dur(mins - limit) if r["stuck"] else ""
     cols = [{"key": k, "label": lbl, "cards": [r for r in rows if r["stage"] == k]} for k, lbl in CLAIM_STAGES]
     return render(request, "claims.html", user, cols=cols, stages=CLAIM_STAGES, f_branch=br or "",
                   readonly=user["role"] not in BILLING)
@@ -584,6 +770,11 @@ async def claim_stage(request: Request, claim_id: int, stage: str = Form(...)):
 
 # ---------------------------------------------------------------- tasks
 
+TASK_ANCHORS = {"missed_call": "missed-calls", "complaint": "complaints", "claim_stuck": "stuck-claims",
+                "unbilled": "unbilled", "followup_call": "follow-up-calls"}
+_PHONE_RE = re.compile(r"\+?(91[6-9]\d{9})\b")
+
+
 @router.get("/tasks", response_class=HTMLResponse)
 def tasks_page(request: Request, branch: str = ""):
     user = auth.require(request, TASK_ROLES)
@@ -595,9 +786,18 @@ def tasks_page(request: Request, branch: str = ""):
     now = util.ts(util.now())
     groups = []
     for kind, label in TASK_KINDS.items():
-        items = [dict(r, overdue=bool(r["due_at"] and r["due_at"] < now)) for r in rows if r["kind"] == kind]
+        items = []
+        for r in rows:
+            if r["kind"] != kind:
+                continue
+            m = _PHONE_RE.search(r["title"] or "")
+            phone = m.group(1) if m else None
+            if phone is None and r["related_type"] == "lead" and r["related_id"]:
+                phone = db.scalar("SELECT phone FROM leads WHERE id = ?", (r["related_id"],))
+            title = _PHONE_RE.sub(lambda mm: fmt_phone(mm.group(1)), r["title"] or "")
+            items.append(dict(r, overdue=bool(r["due_at"] and r["due_at"] < now), phone=phone, title=title))
         if items:
-            groups.append({"label": label, "tasks": items})
+            groups.append({"label": label, "anchor": TASK_ANCHORS[kind], "kind": kind, "tasks": items})
     return render(request, "tasks.html", user, groups=groups, f_branch=br or "", total=len(rows))
 
 
@@ -607,7 +807,17 @@ async def task_done(request: Request, task_id: int):
     t = _own(user, "tasks", task_id)
     db.execute("UPDATE tasks SET status='Done' WHERE id = ?", (task_id,))
     audit.log(auth.actor(user), "done", "task", task_id, {"kind": t["kind"]})
-    return back("/tasks", msg="Task marked done.")
+    return back("/tasks", msg="Task marked done.",
+                undo={"action": f"/tasks/{task_id}/reopen", "fields": {}, "label": "Undo"})
+
+
+@router.post("/tasks/{task_id}/reopen")
+async def task_reopen(request: Request, task_id: int):
+    user = await auth.require_post(request, TASK_ROLES)
+    t = _own(user, "tasks", task_id)
+    db.execute("UPDATE tasks SET status='Open' WHERE id = ?", (task_id,))
+    audit.log(auth.actor(user), "reopen", "task", task_id, {"kind": t["kind"]})
+    return back("/tasks", msg="Task reopened.")
 
 
 # ---------------------------------------------------------------- messages
@@ -644,8 +854,65 @@ def messages_page(request: Request, phone: str = "", q: str = ""):
     if selected:
         thread = db.query(f"SELECT * FROM messages m WHERE m.to_phone = ?{scope_sql} ORDER BY m.id DESC LIMIT 200",
                           (selected["phone"], *scope_params))[::-1]
+    can_reply = bool(selected and selected["title"] != "Owner's daily report")
     return render(request, "messages.html", user, convs=conv_list, selected=selected, thread=thread, phone=phone, q=q,
-                  simulator=config.settings.whatsapp_mode == "simulator")
+                  simulator=config.settings.whatsapp_mode == "simulator", can_reply=can_reply,
+                  window_open=bool(selected and _patient_wrote_within_24h(selected["phone"])),
+                  quick_replies=QUICK_REPLIES)
+
+
+QUICK_REPLIES = ["Your appointment is confirmed.", "Please share a time that suits you.",
+                 "Your report is ready. You can see it in the patient app.", "Our team will call you shortly."]
+
+
+def _patient_wrote_within_24h(phone: str) -> bool:
+    since = util.ts(util.now() - timedelta(hours=24))
+    return bool(db.scalar("SELECT 1 FROM messages WHERE to_phone = ? AND direction = 'in' AND created_at >= ? LIMIT 1",
+                          (phone, since)))
+
+
+@router.post("/messages/reply")
+async def messages_reply(request: Request, phone: str = Form(""), text: str = Form("")):
+    """A staff member answers a patient on WhatsApp.
+
+    Consent rule: a reply within 24 hours of the patient's own message answers a conversation the
+    patient started, so it may go without recorded consent. Anything else needs normal consent.
+    """
+    user = await auth.require_post(request, FRONT)
+    from app import messaging
+    digits = "".join(c for c in phone if c.isdigit())
+    text = text.strip()
+    scope_sql, scope_params = _message_scope(user)
+    if not digits or digits == config.settings.owner_phone or not db.scalar(
+            f"SELECT 1 FROM messages m WHERE m.to_phone = ?{scope_sql} LIMIT 1", (digits, *scope_params)):
+        raise auth.NotFound("conversation")
+    dest = f"/messages?phone={digits}"
+    if not text:
+        return back(dest, err="Type a reply first.")
+    if len(text) > 1000:
+        return back(dest, err="That reply is too long. Keep it under 1,000 characters.")
+    pt = db.one("SELECT id, consent_messages FROM patients WHERE phone = ?", (digits,))
+    in_window = _patient_wrote_within_24h(digits)
+    try:
+        if in_window:
+            messaging.send(digits, "staff_reply", text, patient_id=pt["id"] if pt else None,
+                           require_consent=False, actor=auth.actor(user))
+        elif pt is None:
+            return back(dest, err="Not sent: this person has not given WhatsApp consent and has not written in the last 24 hours.")
+        else:
+            messaging.send(digits, "staff_reply", text, patient_id=pt["id"], actor=auth.actor(user))
+    except messaging.SendBlocked:
+        return back(dest, err="Not sent: this patient has not given WhatsApp consent. Record consent on their profile first.")
+    now = util.now()
+    for lead in db.query("SELECT * FROM leads WHERE phone = ? AND status = 'New'", (digits,)):
+        if user["branch_id"] and lead["branch_id"] not in (None, user["branch_id"]):
+            continue
+        first = lead["first_reply_seconds"]
+        if first is None:
+            first = int((now - util.parse(lead["created_at"])).total_seconds())
+        db.execute("UPDATE leads SET status='Contacted', first_reply_seconds=?, updated_at=? WHERE id=?",
+                   (first, util.ts(now), lead["id"]))
+    return back(dest, msg="Reply sent on WhatsApp.")
 
 
 # ---------------------------------------------------------------- settings
@@ -655,6 +922,7 @@ def settings_page(request: Request):
     user = auth.require(request, ADMIN)
     users = db.query("SELECT u.*, b.name AS branch_name FROM users u LEFT JOIN branches b ON b.id=u.branch_id ORDER BY u.username")
     return render(request, "settings.html", user, users=users, roles=auth.ROLES, mode=config.settings.whatsapp_mode,
+                  hospital_whatsapp=db.get_setting("hospital_whatsapp", ""), front_desk_phone=db.get_setting("front_desk_phone", ""),
                   run=request.query_params.get("run"), me_id=user["id"])
 
 
@@ -670,8 +938,14 @@ async def settings_names(request: Request):
         new = str(form.get(f"branch_{b['id']}", "")).strip()
         if new and new != b["name"]:
             db.execute("UPDATE branches SET name = ? WHERE id = ?", (new, b["id"]))
+    # Help contacts shown to patients (WhatsApp and front-desk phone). Empty clears them.
+    for key in ("hospital_whatsapp", "front_desk_phone"):
+        raw = str(form.get(key, "")).strip()
+        if raw and _phone_or_none(raw) is None:
+            return back("/settings", err=f"{'Hospital WhatsApp' if key == 'hospital_whatsapp' else 'Front desk phone'}: {PHONE_HELP}")
+        db.set_setting(key, _phone_or_none(raw) if raw else "")
     audit.log(auth.actor(user), "update", "settings", None, {"hospital_name": name})
-    return back("/settings", msg="Names saved.")
+    return back("/settings", msg="Settings saved.")
 
 
 @router.post("/settings/run-automations")
@@ -795,7 +1069,23 @@ def audit_page(request: Request):
 
 @router.get("/manifest.webmanifest", include_in_schema=False)
 def manifest():
-    return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+    import json
+    body = json.loads((STATIC_DIR / "manifest.webmanifest").read_text())
+    body["name"] = f"{config.PRODUCT_NAME} · {config.PRODUCT_TAGLINE}"
+    body["short_name"] = config.PRODUCT_NAME
+    return Response(json.dumps(body), media_type="application/manifest+json")
+
+
+@router.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    # Staff and patient screens hold patient data behind a login: nothing here is for search engines.
+    return Response("User-agent: *\nDisallow: /\n", media_type="text/plain")
+
+
+@router.get("/offline.html", include_in_schema=False, response_class=HTMLResponse)
+def offline_page(request: Request):
+    # Cached by the service worker; holds no patient data.
+    return TEMPLATES.TemplateResponse(request, "offline.html", {})
 
 
 @router.get("/sw.js", include_in_schema=False)

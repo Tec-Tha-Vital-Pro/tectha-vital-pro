@@ -26,15 +26,23 @@
       <div class="card-top"><span class="insurer">{{ k.insurer }}</span><span class="branch-code" title="{{ k.branch_name }}">{{ k.branch_id }}</span></div>
       <span class="amt">{{ k.amount|inr }}</span>
       <span class="small"><strong>{{ k.name }}</strong> <span class="uid-sm">{{ k.uid }}</span></span>
-      <span class="small {{ 'bad-text' if k.stuck else 'muted' }}">{% if k.stuck %}{{ icon('alert', cls='ic xs') }} Waiting {{ k.waiting }}{% else %}In this stage {{ k.waiting }}{% endif %}</span>
+      <span class="small {{ 'bad-text' if k.stuck else 'muted' }}">{% if k.stuck %}{{ icon('alert', cls='ic xs') }} Over the limit by {{ k.over }}{% else %}In this stage {{ k.waiting }}{% endif %}</span>
       {% if c.key not in ('Settled', 'Denied') and not readonly %}
-      <form method="post" action="/claims/{{ k.id }}/stage" class="row-form">
-        {{ csrf_field(csrf) }}
-        <label for="mv-{{ k.id }}" class="sr-only">Move claim for {{ k.name }}</label>
-        {% set keys = stages|map('first')|list %}{% set nxt = keys[keys.index(c.key) + 1] if keys.index(c.key) + 1 < keys|length else '' %}
-        <select id="mv-{{ k.id }}" name="stage">{% for s, lbl in stages if s != c.key %}<option value="{{ s }}" {% if s == nxt %}selected{% endif %}>{{ lbl }}</option>{% endfor %}</select>
-        <button class="btn sm" type="submit">Move</button>
+      {% set keys = stages|map('first')|list %}{% set labels = dict(stages) %}
+      {% set nxt = keys[keys.index(c.key) + 1] %}
+      <form method="post" action="/claims/{{ k.id }}/stage" class="card-move">
+        {{ csrf_field(csrf) }}<input type="hidden" name="stage" value="{{ nxt }}">
+        <button class="btn sm primary" type="submit">Move to {{ labels[nxt]|lower }}</button>
       </form>
+      <details class="card-more">
+        <summary>Other stage</summary>
+        <form method="post" action="/claims/{{ k.id }}/stage" class="row-form">
+          {{ csrf_field(csrf) }}
+          <label for="mv-{{ k.id }}" class="sr-only">Move claim for {{ k.name }} to</label>
+          <select id="mv-{{ k.id }}" name="stage">{% for s, lbl in stages if s not in (c.key, nxt) %}<option value="{{ s }}">{{ lbl }}</option>{% endfor %}</select>
+          <button class="btn sm" type="submit">Move</button>
+        </form>
+      </details>
       {% endif %}
     </article>
     {% else %}<p class="col-empty">No claims here</p>{% endfor %}

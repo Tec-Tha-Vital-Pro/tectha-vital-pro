@@ -9,7 +9,7 @@
     <h1>Operations overview</h1>
   </div>
   <div class="page-actions">
-    <a class="btn sm" href="/tasks">{{ icon('tasks') }} Open tasks</a>
+    {% if user.role != 'owner' %}<a class="btn sm" href="/tasks">{{ icon('tasks') }} Open tasks</a>{% endif %}
   </div>
 </div>
 
@@ -46,7 +46,7 @@
           <span class="muted small">Each one should be called back within 15 minutes.</span>
         </div>
         <span class="attn-n num">{{ attention.missed_calls_open }}</span>
-        <a class="btn sm" href="/tasks">Call back</a>
+        {% if user.role != 'owner' %}<a class="btn sm" href="/tasks#missed-calls">Call back</a>{% endif %}
       </li>
       <li class="{{ 'is-warn' if attention.complaints_open else 'is-clear' }}">
         <span class="attn-ic">{{ icon('complaint') }}</span>
@@ -55,7 +55,7 @@
           <span class="muted small">Patients who rated a visit 1–3. The branch manager should call today.</span>
         </div>
         <span class="attn-n num">{{ attention.complaints_open }}</span>
-        <a class="btn sm" href="/tasks">See complaints</a>
+        {% if user.role != 'owner' %}<a class="btn sm" href="/tasks#complaints">See complaints</a>{% endif %}
       </li>
     </ul>
   </section>

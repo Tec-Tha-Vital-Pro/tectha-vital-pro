@@ -1,8 +1,8 @@
-/* Tec Tha Care Connect service worker.
+/* Tec Tha Vital service worker.
    Caches ONLY static assets (CSS, JS, icons, the offline page). Pages and anything with
    patient data always come from the network and are never stored on the device. */
-const CACHE = "tectha-static-v1";
-const ASSETS = ["/static/style.css", "/static/app.js", "/static/offline.html",
+const CACHE = "tectha-static-v2";
+const ASSETS = ["/static/style.css", "/static/app.js", "/offline.html",
   "/static/icons/icon-192.png", "/static/icons/icon-512.png", "/static/icons/favicon-32.png"];
 
 self.addEventListener("install", (e) => {
@@ -27,6 +27,6 @@ self.addEventListener("fetch", (e) => {
   }
   if (req.mode === "navigate") {
     // Pages: network only. Offline -> a static page with no patient data.
-    e.respondWith(fetch(req).catch(() => caches.match("/static/offline.html")));
+    e.respondWith(fetch(req).catch(() => caches.match("/offline.html")));
   }
 });

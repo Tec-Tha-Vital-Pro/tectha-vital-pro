@@ -1,69 +1,84 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field, status_pill, icon, empty %}
+{% from "_macros.html" import csrf_field, appt_pill, icon, empty, qs, field_err, phone_attrs %}
 {% block title %}Appointments{% endblock %}
 {% block content %}
-{% set seen = rows|selectattr('status', 'equalto', 'Visited')|list|length %}
-{% set waiting = rows|selectattr('status', 'in', ['Booked', 'Confirmed'])|list|length %}
 <div class="page-head">
   <div class="page-title">
     <span class="eyebrow label">OPD</span>
     <h1>{{ day.strftime('%A, %d %b') }}</h1>
-    <p class="muted"><span class="num">{{ rows|length }}</span> booked · <span class="num">{{ seen }}</span> seen · <span class="num">{{ waiting }}</span> still to come</p>
+    <p class="muted"><span class="num">{{ counts[''] }}</span> booked · <span class="num">{{ counts.seen }}</span> seen · <span class="num">{{ counts.upcoming }}</span> still to come{% if counts.unconfirmed %} · <span class="warn-text"><span class="num">{{ counts.unconfirmed }}</span> not confirmed</span>{% endif %}</p>
   </div>
   <div class="page-actions">
     <form method="get" action="/appointments" class="daynav">
       {% if f_branch %}<input type="hidden" name="branch" value="{{ f_branch }}">{% endif %}
-      <a class="icon-btn" href="/appointments?day={{ prev }}{% if f_branch %}&amp;branch={{ f_branch }}{% endif %}" aria-label="Previous day">{{ icon('chev-left') }}</a>
+      {% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
+      <a class="icon-btn" href="{{ qs('/appointments', query, 'day', prev) }}" aria-label="Previous day">{{ icon('chev-left') }}</a>
       <label for="a-day" class="sr-only">Date</label>
-      <input id="a-day" type="date" name="day" value="{{ day.isoformat() }}" data-autosubmit>
-      <a class="icon-btn" href="/appointments?day={{ next_day }}{% if f_branch %}&amp;branch={{ f_branch }}{% endif %}" aria-label="Next day">{{ icon('chev-right') }}</a>
-      <noscript><button class="btn sm" type="submit">Show</button></noscript>
+      <input id="a-day" type="date" name="day" value="{{ day.isoformat() }}" data-submit-on-blur>
+      <a class="icon-btn" href="{{ qs('/appointments', query, 'day', next_day) }}" aria-label="Next day">{{ icon('chev-right') }}</a>
+      <button class="btn sm kbd-save" type="submit">Show</button>
     </form>
     <button type="button" class="btn primary" data-open="book">{{ icon('plus') }} Book appointment</button>
   </div>
 </div>
 
+<div class="chips" role="group" aria-label="Show">
+  {% for key, label in filters %}
+  <a class="chip" href="{{ qs('/appointments', query, 'show', key) }}" {% if key == show %}aria-current="true"{% endif %}>{{ label }} <span class="count">{{ counts[key] }}</span></a>
+  {% endfor %}
+</div>
+
 <div class="tbl-wrap cards">
   <table class="appt">
-    <thead><tr><th>Token</th><th>Time</th><th>Patient</th><th>Doctor</th><th>Branch</th><th>WhatsApp reminders</th><th>Status</th><th class="r">Mark as</th></tr></thead>
+    <thead><tr><th>Token{% if multi_branch %} <span class="th-note">(per branch)</span>{% endif %}</th><th>Time</th><th>Patient</th><th>Doctor</th><th>Branch</th><th>WhatsApp reminders</th><th>Status</th><th class="r">Mark as</th></tr></thead>
     <tbody>
     {% for a in rows %}
     <tr class="st-{{ a.status|lower }}">
-      <td data-label="Token"><span class="tok">{{ a.token_no or '—' }}</span></td>
-      <td class="num nowrap" data-label="Time"><strong>{{ a.starts_at[11:16] }}</strong></td>
-      <td class="lead-cell"><a class="name-link" href="/patients/{{ a.pid }}">{{ a.name }}</a><span class="sub"><span class="uid-sm">{{ a.uid }}</span></span></td>
-      <td data-label="Doctor">{{ a.doctor }}<span class="sub">{{ a.specialty }}</span></td>
-      <td data-label="Branch">{{ a.branch_name }}</td>
-      <td class="small" data-label="Reminders">
-        <span class="rem {{ 'on' if a.reminder_24h_sent_at }}">24 h</span><span class="rem {{ 'on' if a.reminder_2h_sent_at }}">2 h</span>
+      <td class="c-token" data-label="Token">{% if a.token_no %}<span class="tok">{% if multi_branch %}<small>{{ a.branch_id }}-</small>{% endif %}{{ a.token_no }}</span>{% elif a.status == 'Cancelled' %}<span class="tok">—</span>{% else %}<span class="muted small">At check-in</span>{% endif %}</td>
+      <td class="num nowrap c-time" data-label="Time"><strong>{{ a.starts_at[11:16] }}</strong></td>
+      <td class="lead-cell c-patient"><a class="name-link" href="/patients/{{ a.pid }}">{{ a.name }}</a><span class="sub"><span class="uid-sm">{{ a.uid }}</span></span></td>
+      <td class="c-doctor" data-label="Doctor">{{ a.doctor }}<span class="sub">{{ a.specialty }}</span></td>
+      <td class="c-branch" data-label="Branch">{{ a.branch_name }}</td>
+      <td class="small c-rem" data-label="Reminders">
+        <span class="rem {{ 'on' if a.reminder_24h_sent_at }}" title="{{ ('Sent ' ~ a.reminder_24h_sent_at[8:10] ~ '/' ~ a.reminder_24h_sent_at[5:7] ~ ' ' ~ a.reminder_24h_sent_at[11:16]) if a.reminder_24h_sent_at else 'Not sent yet' }}">{{ '✓' if a.reminder_24h_sent_at else '○' }} 24 h</span><span class="rem {{ 'on' if a.reminder_2h_sent_at }}" title="{{ ('Sent ' ~ a.reminder_2h_sent_at[11:16]) if a.reminder_2h_sent_at else 'Not sent yet' }}">{{ '✓' if a.reminder_2h_sent_at else '○' }} 2 h</span>
       </td>
-      <td data-label="Status">{{ status_pill(a.status) }}</td>
-      <td class="actions r" data-label="">
+      <td class="c-status" data-label="Status">{{ appt_pill(a.status) }}</td>
+      <td class="actions r c-actions" data-label="">
         {% if a.status in ('Booked', 'Confirmed') %}
-        <form method="post" action="/appointments/{{ a.id }}/status">{{ csrf_field(csrf) }}<input type="hidden" name="status" value="Visited"><button class="btn sm primary" type="submit">Visited</button></form>
+        <form method="post" action="/appointments/{{ a.id }}/status">{{ csrf_field(csrf) }}<input type="hidden" name="status" value="Visited"><button class="btn sm primary" type="submit">Seen</button></form>
         <form method="post" action="/appointments/{{ a.id }}/status">{{ csrf_field(csrf) }}<input type="hidden" name="status" value="NoShow"><button class="btn sm" type="submit">No-show</button></form>
         <form method="post" action="/appointments/{{ a.id }}/status">{{ csrf_field(csrf) }}<input type="hidden" name="status" value="Cancelled"><button class="btn sm ghost" type="submit">Cancel</button></form>
         {% endif %}
       </td>
     </tr>
     {% else %}
-    <tr class="empty-row"><td colspan="8" class="empty-cell">{{ empty('calendar', 'No appointments on this day', 'Book one with Book appointment, or pick another date. WhatsApp bookings land here automatically.') }}</td></tr>
+    <tr class="empty-row"><td colspan="8" class="empty-cell">{% if show %}{{ empty('calendar', 'Nobody in this list', 'Choose All to see every appointment on this day.') }}{% else %}{{ empty('calendar', 'No appointments on this day', 'Book one with Book appointment, or pick another date. WhatsApp bookings land here automatically.') }}{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
 
-<dialog id="book" class="slide" aria-labelledby="book-h">
+<dialog id="book" class="slide" aria-labelledby="book-h" {% if open_dialog == 'book' %}data-open-on-load{% endif %}>
   <div class="dlg-head"><h2 id="book-h">Book appointment</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
   <div class="dlg-body">
     <p class="muted small">A returning patient is matched by mobile number, so they keep the same TT- ID at every branch. The token number is given automatically.</p>
+    {% if errors %}<p class="form-err" role="alert">{{ icon('alert', cls='ic xs') }} Check the fields marked below. Nothing was booked yet.</p>{% endif %}
     <form method="post" action="/appointments/book" class="stack">
       {{ csrf_field(csrf) }}
-      <label for="a-name">Patient name<input id="a-name" name="name" autocomplete="off" required></label>
-      <label for="a-phone">Mobile number<input id="a-phone" name="phone" inputmode="tel" placeholder="98765 43210" autocomplete="off" required></label>
-      <label for="a-doc">Doctor<select id="a-doc" name="doctor_id" required>{% for d in doctors %}<option value="{{ d.id }}">{{ d.name }} · {{ d.specialty }} · {{ d.branch_name }} · ₹{{ d.fee }}</option>{% endfor %}</select></label>
-      <label for="a-when">Date and time<input id="a-when" type="datetime-local" name="starts_at" value="{{ default_time }}" required></label>
-      <label class="check" for="a-consent"><input id="a-consent" type="checkbox" name="consent" value="1"> <span>Patient agrees to WhatsApp reminders, reports and bills <span class="hint">(DPDP consent, recorded with time)</span></span></label>
+      <label for="a-name">Patient name<input id="a-name" name="name" autocomplete="off" required maxlength="120" value="{{ form.name or '' }}" {{ field_err(errors, 'name', 'a-name', attrs=True) }}></label>
+      {{ field_err(errors, 'name', 'a-name') }}
+      <label for="a-phone">Mobile number<input id="a-phone" name="phone" placeholder="98765 43210" required value="{{ form.phone or '' }}" {{ phone_attrs() }} {{ field_err(errors, 'phone', 'a-phone', attrs=True, hint=True) }}></label>
+      {{ field_err(errors, 'phone', 'a-phone', hint='10 digits. +91 is added for you.') }}
+      <label for="a-doc">Doctor<select id="a-doc" name="doctor_id" required {{ field_err(errors, 'doctor_id', 'a-doc', attrs=True) }}>
+        {% for g in doctor_groups %}<optgroup label="{{ g.branch }}">{% for d in g.doctors %}<option value="{{ d.id }}" {% if form.doctor_id|string == d.id|string %}selected{% endif %}>{{ d.name }} · {{ d.specialty }} · ₹{{ d.fee }}</option>{% endfor %}</optgroup>{% endfor %}
+      </select></label>
+      {{ field_err(errors, 'doctor_id', 'a-doc') }}
+      <div class="field">
+        <label for="a-when">Date and time</label>
+        <div class="with-btn"><input id="a-when" type="datetime-local" name="starts_at" value="{{ form.starts_at or default_time }}" required {{ field_err(errors, 'starts_at', 'a-when', attrs=True) }}><button type="button" class="btn" data-fill="{{ now_time }}" data-target="a-when">Now</button></div>
+      </div>
+      {{ field_err(errors, 'starts_at', 'a-when') }}
+      <label class="check" for="a-consent"><input id="a-consent" type="checkbox" name="consent" value="1" {% if form.consent %}checked{% endif %}> <span>Patient agrees to WhatsApp reminders, reports and bills <span class="hint">(DPDP consent, recorded with time)</span></span></label>
       <button class="btn primary" type="submit">Book and give token</button>
     </form>
   </div>

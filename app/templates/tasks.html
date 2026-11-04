@@ -10,7 +10,7 @@
   </div>
 </div>
 {% for g in groups %}
-<section class="sec" aria-labelledby="tg-{{ loop.index }}">
+<section class="sec" id="{{ g.anchor }}" aria-labelledby="tg-{{ loop.index }}">
   <div class="sec-head"><h2 id="tg-{{ loop.index }}"><span class="h-ic">{{ icon(kind_icon.get(g.label, 'tasks')) }}</span>{{ g.label }} <span class="count-badge num">{{ g.tasks|length }}</span></h2></div>
   <ul class="task-list">
     {% for t in g.tasks %}
@@ -19,7 +19,10 @@
         <strong>{{ t.title }}</strong>
         <span class="meta"><span>{{ t.branch_name or 'All branches' }}</span><span class="num">created {{ t.created_at[8:10] }}/{{ t.created_at[5:7] }} {{ t.created_at[11:16] }}</span>{% if t.due_at %}<span class="num {{ 'bad-text' if t.overdue }}">due {{ t.due_at[11:16] }}{% if t.overdue %} · overdue{% endif %}</span>{% endif %}</span>
       </div>
-      <form method="post" action="/tasks/{{ t.id }}/done">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ icon('check') }} Done</button></form>
+      <div class="task-actions">
+        {% if t.phone %}<a class="btn sm primary" href="tel:+{{ t.phone }}">{{ icon('phone') }} Call {{ t.phone|phone }}</a>{% endif %}
+        <form method="post" action="/tasks/{{ t.id }}/done">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ icon('check') }} Done</button></form>
+      </div>
     </li>
     {% endfor %}
   </ul>

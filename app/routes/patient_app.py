@@ -20,6 +20,83 @@ from app import audit, billing, config, db, messaging, patients, security, util
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 TEMPLATES.env.filters["inr"] = util.inr
+TEMPLATES.env.globals["product"] = config.PRODUCT_NAME
+TEMPLATES.env.globals["tagline"] = config.PRODUCT_TAGLINE
+
+LANG_COOKIE = "tt_lang"
+# Key patient-app strings in English and Hindi (M12). Hindi to be reviewed by a native speaker before
+# the pilot; never machine-translated. Strings not listed stay in English.
+STRINGS = {
+    "en": {
+        "tab_home": "Home", "tab_book": "Book", "tab_bills": "Bills", "tab_reports": "Reports", "tab_profile": "Profile",
+        "tagline": "Book visits, see reports and pay bills from your phone.",
+        "mobile_number": "Mobile number", "get_code": "Get code on WhatsApp",
+        "use_number": "Use the number you gave at the hospital.",
+        "code_label": "6-digit code from WhatsApp", "log_in": "Log in", "other_number": "Use a different number",
+        "not_found_h": "We could not find this number",
+        "not_found_p": "Only registered patients can log in. Message us on WhatsApp or visit the front desk, and we will register you.",
+        "try_other": "Try another number",
+        "yes_there": "Yes, I'll be there", "change_time": "Ask to change time", "cancel_visit": "Cancel visit",
+        "confirm": "Confirm", "confirmed": "Confirmed", "please_confirm": "Please confirm",
+        "book_visit": "Book a visit", "book_appt": "Book an appointment", "my_visits": "My visits",
+        "to_pay": "to pay", "all_paid": "All paid", "paid": "Paid", "pay": "Pay {amount}", "total": "Total {amount}",
+        "help_title": "Need help?", "help_wa": "Message us on WhatsApp", "help_call": "Call the front desk",
+        "help_none": "Ask at the front desk. The team replies on WhatsApp between 8 am and 9 pm.",
+        "cancel_title": "Cancel this visit?", "cancel_q": "Cancel your visit with {doctor} on {when}?",
+        "cancel_note": "If you cancel, the time goes to another patient. You can book again any time.",
+        "yes_cancel": "Yes, cancel", "keep_visit": "Keep my visit",
+        "language": "Language", "log_out": "Log out",
+    },
+    "hi": {
+        "tab_home": "होम", "tab_book": "बुक करें", "tab_bills": "बिल", "tab_reports": "रिपोर्ट", "tab_profile": "प्रोफ़ाइल",
+        "tagline": "अपने फ़ोन से डॉक्टर से मिलने का समय लें, रिपोर्ट देखें और बिल भरें।",
+        "mobile_number": "मोबाइल नंबर", "get_code": "WhatsApp पर कोड पाएं",
+        "use_number": "वही नंबर डालें जो आपने अस्पताल में दिया था।",
+        "code_label": "WhatsApp पर आया 6 अंकों का कोड", "log_in": "लॉग इन करें", "other_number": "दूसरा नंबर डालें",
+        "not_found_h": "यह नंबर हमारे पास नहीं मिला",
+        "not_found_p": "केवल पंजीकृत मरीज़ लॉग इन कर सकते हैं। WhatsApp पर संदेश भेजें या फ्रंट डेस्क पर आएँ, हम आपका पंजीकरण कर देंगे।",
+        "try_other": "दूसरा नंबर आज़माएँ",
+        "yes_there": "हाँ, मैं आऊँगा/आऊँगी", "change_time": "समय बदलने के लिए कहें", "cancel_visit": "मुलाक़ात रद्द करें",
+        "confirm": "पक्का करें", "confirmed": "पक्का", "please_confirm": "कृपया पक्का करें",
+        "book_visit": "डॉक्टर से मिलने का समय लें", "book_appt": "डॉक्टर से मिलने का समय लें", "my_visits": "मेरी मुलाक़ातें",
+        "to_pay": "भुगतान बाकी", "all_paid": "सब भुगतान हो गया", "paid": "भुगतान हो गया", "pay": "{amount} भुगतान करें",
+        "total": "कुल {amount}",
+        "help_title": "मदद चाहिए?", "help_wa": "WhatsApp पर संदेश भेजें", "help_call": "फ्रंट डेस्क को कॉल करें",
+        "help_none": "फ्रंट डेस्क पर पूछें। टीम सुबह 8 से रात 9 बजे तक WhatsApp पर जवाब देती है।",
+        "cancel_title": "यह मुलाक़ात रद्द करें?", "cancel_q": "{when} को {doctor} के साथ आपकी मुलाक़ात रद्द करें?",
+        "cancel_note": "रद्द करने पर यह समय किसी और मरीज़ को मिल जाएगा। आप कभी भी फिर से बुक कर सकते हैं।",
+        "yes_cancel": "हाँ, रद्द करें", "keep_visit": "मेरी मुलाक़ात रहने दें",
+        "language": "भाषा", "log_out": "लॉग आउट",
+    },
+}
+
+
+def _lang(request: Request) -> str:
+    v = request.cookies.get(LANG_COOKIE, "en")
+    return v if v in STRINGS else "en"
+
+
+def _translator(lang: str):
+    table, base = STRINGS[lang], STRINGS["en"]
+
+    def t(key: str, **kw) -> str:
+        return (table.get(key) or base[key]).format(**kw)
+    return t
+
+
+def _flash_signer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(config.settings.session_secret, salt="tt-patient-flash")
+
+
+def read_flash(token: str | None) -> str | None:
+    """Toasts show only text this server signed in the last 5 minutes (a crafted ?err= link shows nothing)."""
+    if not token:
+        return None
+    try:
+        v = _flash_signer().loads(token, max_age=300)
+    except BadSignature:
+        return None
+    return v if isinstance(v, str) else None
 
 COOKIE = "tt_patient"
 PRE_COOKIE = "tt_pcsrf"           # double-submit CSRF token for the login forms (no session yet)
@@ -136,17 +213,26 @@ def _hospital() -> str:
 
 
 def _page(request: Request, name: str, p: dict | None, status_code: int = 200, **ctx) -> HTMLResponse:
-    ctx.setdefault("msg", request.query_params.get("msg"))
-    ctx.setdefault("err", request.query_params.get("err"))
+    ctx.setdefault("msg", read_flash(request.query_params.get("msg")))
+    ctx.setdefault("err", read_flash(request.query_params.get("err")))
+    lang = _lang(request)
     ctx.update(request=request, me=p, hospital=_hospital(), csrf=p["csrf"] if p else ctx.get("csrf", ""),
-               path=request.url.path, simulator=demo_mode(), demo=demo_mode())
+               path=request.url.path, simulator=demo_mode(), demo=demo_mode(), lang=lang, t=_translator(lang),
+               help_wa=db.get_setting("hospital_whatsapp", ""), help_call=db.get_setting("front_desk_phone", ""))
     return TEMPLATES.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
 def _go(path: str, msg: str | None = None, err: str | None = None) -> RedirectResponse:
     from urllib.parse import urlencode
-    q = {k: v for k, v in (("msg", msg), ("err", err)) if v}
-    return RedirectResponse(path + ("?" + urlencode(q) if q else ""), status_code=303)
+    q = {k: _flash_signer().dumps(v) for k, v in (("msg", msg), ("err", err)) if v}
+    sep = "&" if "?" in path else "?"
+    return RedirectResponse(path + (sep + urlencode(q) if q else ""), status_code=303)
+
+
+def not_found_page(request: Request) -> HTMLResponse:
+    """Used by the app-wide 404 handler for mistyped /my addresses."""
+    return _page(request, "patient/error.html", current_patient(request), status_code=404, title="Page not found",
+                 detail="Check the address, or go back to the home screen.")
 
 
 def relative_phrase(starts_at: str, now: datetime) -> str:
@@ -304,8 +390,10 @@ def _appointments(pid: int, upcoming: bool, now: datetime, limit: int = 50) -> l
 
 
 def _bills(pid: int) -> list[dict]:
+    # Unpaid bills first, so the amount to pay is never at the bottom of the list (M13).
     return db.query("SELECT bl.*, b.name AS branch, bl.total - bl.paid AS balance FROM bills bl"
-                    " JOIN branches b ON b.id = bl.branch_id WHERE bl.patient_id = ? ORDER BY bl.created_at DESC", (pid,))
+                    " JOIN branches b ON b.id = bl.branch_id WHERE bl.patient_id = ?"
+                    " ORDER BY (bl.total > bl.paid) DESC, bl.created_at DESC", (pid,))
 
 
 def _own(sql: str, pid: int, rid: int, what: str) -> dict:
@@ -351,6 +439,32 @@ def appointments(request: Request):
     now = util.now()
     return _page(request, "patient/appointments.html", p, upcoming=_appointments(p["id"], True, now),
                  past=_appointments(p["id"], False, now, 20))
+
+
+@router.get("/appointments/{appt_id}/cancel")
+def appointment_cancel_confirm(request: Request, appt_id: int):
+    """A cancel is never one tap: the patient sees what they are cancelling first (M3)."""
+    p = _me(request)
+    try:
+        a = _own("SELECT a.*, d.name AS doctor, b.name AS branch FROM appointments a JOIN doctors d ON d.id = a.doctor_id"
+                 " JOIN branches b ON b.id = a.branch_id WHERE a.id = ?", p["id"], appt_id, "appointment")
+    except LookupError:
+        return _not_found(request, p, "appointment")
+    if a["status"] not in ("Booked", "Confirmed"):
+        return _go("/my/appointments", err="This appointment can no longer be changed.")
+    back = request.query_params.get("back", "/my/")
+    return _page(request, "patient/cancel.html", p, a=a, back=back if back in ("/my/", "/my/appointments") else "/my/")
+
+
+@router.get("/lang/{code}")
+def set_language(request: Request, code: str):
+    nxt = request.query_params.get("next", "/my/")
+    if not (nxt.startswith("/my/") or nxt == "/my") or "//" in nxt:
+        nxt = "/my/"
+    resp = RedirectResponse(nxt, status_code=303)
+    if code in STRINGS:
+        resp.set_cookie(LANG_COOKIE, code, max_age=365 * 24 * 3600, httponly=True, samesite="lax", path="/my")
+    return resp
 
 
 @router.post("/appointments/{appt_id}/action")
@@ -612,8 +726,8 @@ async def feedback_submit(request: Request, appt_id: int):
 
 @router.get("/manifest.webmanifest")
 def manifest():
-    name = f"{_hospital()} Care"
-    body = {"name": name, "short_name": name[:12], "start_url": "/my/", "scope": "/my/", "display": "standalone",
+    name = f"{_hospital()} · {config.PRODUCT_NAME}"
+    body = {"name": name, "short_name": _hospital()[:12] or config.PRODUCT_NAME, "start_url": "/my/", "scope": "/my/", "display": "standalone",
             "background_color": "#f3f7f5", "theme_color": "#0b6e4f",
             "icons": [{"src": "/static/icons/patient-192.png", "sizes": "192x192", "type": "image/png"},
                       {"src": "/static/icons/patient-512.png", "sizes": "512x512", "type": "image/png"},
