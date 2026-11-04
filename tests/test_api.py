@@ -18,7 +18,8 @@ def client(fresh_db):
 
 
 def test_health_needs_no_key(client):
-    assert client.get("/api/health").json() == {"ok": True}
+    body = client.get("/api/health").json()
+    assert body["ok"] is True and "scheduler_running" in body
 
 
 def test_auth_missing_wrong_and_disabled(client, monkeypatch):

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b6e4f" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1a18" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="{{ hospital }}">
+<title>{% block title %}{{ hospital }}{% endblock %} · Care</title>
+<link rel="manifest" href="/my/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/static/icons/patient-192.png">
+<link rel="apple-touch-icon" href="/static/icons/patient-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/patient.css">
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+{% from "patient/_icons.html" import icon %}
+<header class="appbar">
+  <div class="appbar-in">
+    {% if demo %}<span class="demo-badge" title="Sample data for demonstration">Demo</span>{% endif %}
+    {% block appbar %}
+    <a class="brand" href="/my/"><span class="mark" aria-hidden="true">{{ hospital[:1] }}</span><span><strong>{{ hospital }}</strong><small>Tec Tha Care Connect</small></span></a>
+    {% endblock %}
+  </div>
+</header>
+<main class="screen" id="main">
+  {% if msg %}<div class="toast ok" role="status">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="toast bad" role="alert">{{ err }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+{% if me %}
+<nav class="tabbar" aria-label="Main">
+  {% set tabs = [('/my/', 'Home', 'home'), ('/my/book', 'Book', 'book'), ('/my/bills', 'Bills', 'bills'), ('/my/reports', 'Reports', 'reports'), ('/my/profile', 'Profile', 'profile')] %}
+  {% for href, label, ic in tabs %}
+  {% set active = (href == '/my/' and (path == '/my/' or path.startswith('/my/appointments') or path.startswith('/my/feedback'))) or (href != '/my/' and path.startswith(href)) %}
+  <a href="{{ href }}" {% if active %}aria-current="page"{% endif %}>{{ icon(ic) }}<span>{{ label }}</span></a>
+  {% endfor %}
+</nav>
+{% endif %}
+<script src="/static/patient.js" defer></script>
+</body>
+</html>

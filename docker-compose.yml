@@ -1,0 +1,51 @@
+# Tec Tha Care Connect with Docker.
+#
+#   cp .env.example .env            then fill in real values (never commit .env)
+#   docker compose up -d app        app only, on http://127.0.0.1:8000 (laptop / behind your own proxy)
+#   docker compose --profile https up -d     app + Caddy with automatic HTTPS (set TT_DOMAIN in .env)
+#
+# First admin login:
+#   docker compose exec app python -m app.auth create-admin admin "Your Name"
+# Backup (also see deploy/backup.cron.example):
+#   docker compose exec app /app/deploy/backup.sh
+services:
+  app:
+    build: .
+    image: tectha-care:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TT_DB_PATH: /data/tectha.db
+      TT_BACKUP_DIR: /data/backups
+    volumes:
+      - tectha-data:/data
+    ports:
+      # Localhost only. The public reaches the app through Caddy, never directly.
+      - "127.0.0.1:8000:8000"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      TT_DOMAIN: ${TT_DOMAIN:-localhost}   # set TT_DOMAIN in .env, e.g. care.yourhospital.in
+      TT_UPSTREAM: app:8000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+volumes:
+  tectha-data:
+  caddy-data:
+  caddy-config:

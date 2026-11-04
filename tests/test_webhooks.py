@@ -19,12 +19,23 @@ def client(fresh_db):
     return TestClient(app)
 
 
+KEY = {"X-API-Key": "test-key"}
+SECRET = "s3cret"
+
+
+def _signed(client, payload):
+    raw = json.dumps(payload).encode()
+    sig = "sha256=" + hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    return client.post("/webhooks/whatsapp", content=raw,
+                       headers={"X-Hub-Signature-256": sig, "content-type": "application/json"})
+
+
 def _settings(monkeypatch, **kw):
     monkeypatch.setattr(config, "settings", dataclasses.replace(config.settings, **kw))
 
 
 def _sim(client, phone, text):
-    r = client.post("/webhooks/simulate-inbound", json={"phone": phone, "text": text})
+    r = client.post("/webhooks/simulate-inbound", json={"phone": phone, "text": text}, headers=KEY)
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -55,9 +66,10 @@ def test_signature_required_when_secret_set(client, monkeypatch):
     assert r.json()["processed"][0]["action"] == "lead_created"
 
 
-def test_meta_unsupported_type_reported(client):
+def test_meta_unsupported_type_reported(client, monkeypatch):
+    _settings(monkeypatch, whatsapp_app_secret=SECRET)
     payload = {"entry": [{"changes": [{"value": {"messages": [{"from": "919812345678", "type": "image"}]}}]}]}
-    r = client.post("/webhooks/whatsapp", json=payload)
+    r = _signed(client, payload)
     assert r.json()["processed"][0]["action"] == "unsupported_type"
 
 
@@ -142,13 +154,14 @@ def test_stop_withdraws_consent(client):
 
 def test_simulator_form_redirects_and_live_mode_404(client, monkeypatch):
     r = client.post("/webhooks/simulate-inbound", data={"phone": "9812345670", "text": "Hi"}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/messages"
+    assert r.status_code == 303 and r.headers["location"] == "/login"   # not logged in: no fake patient messages
+    assert client.post("/webhooks/simulate-inbound", json={"phone": "9812345670", "text": "Hi"}).status_code == 401
     _settings(monkeypatch, whatsapp_mode="live")
-    assert client.post("/webhooks/simulate-inbound", json={"phone": "9812345670", "text": "Hi"}).status_code == 404
+    assert client.post("/webhooks/simulate-inbound", json={"phone": "9812345670", "text": "Hi"}, headers=KEY).status_code == 404
 
 
 def test_simulator_rejects_bad_phone(client):
-    assert client.post("/webhooks/simulate-inbound", json={"phone": "123", "text": "Hi"}).status_code == 400
+    assert client.post("/webhooks/simulate-inbound", json={"phone": "123", "text": "Hi"}, headers=KEY).status_code == 400
 
 
 def test_missed_call_api_key(client, monkeypatch):
@@ -166,7 +179,12 @@ def test_missed_call_api_key(client, monkeypatch):
     assert client.post("/webhooks/missed-call", json=body, headers={"X-API-Key": "x"}).status_code == 503
 
 
-def test_meta_retry_of_same_message_is_handled_once(fresh_db):
+def test_unsigned_meta_webhook_refused_without_secret(client):
+    assert client.post("/webhooks/whatsapp", json={"entry": []}).status_code == 503
+
+
+def test_meta_retry_of_same_message_is_handled_once(fresh_db, monkeypatch):
+    _settings(monkeypatch, whatsapp_app_secret=SECRET)
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.routes import webhooks
@@ -174,8 +192,15 @@ def test_meta_retry_of_same_message_is_handled_once(fresh_db):
     c = TestClient(app)
     body = {"entry": [{"changes": [{"value": {"messages": [
         {"id": "wamid.TEST1", "from": "919811122233", "type": "text", "text": {"body": "Hi, need a doctor"}}]}}]}]}
-    first = c.post("/webhooks/whatsapp", json=body).json()["processed"][0]
-    second = c.post("/webhooks/whatsapp", json=body).json()["processed"][0]
+    first = _signed(c, body).json()["processed"][0]
+    second = _signed(c, body).json()["processed"][0]
     assert first["action"] != "duplicate_ignored"
     assert second["action"] == "duplicate_ignored"
     assert fresh_db.scalar("SELECT COUNT(*) FROM leads WHERE phone='919811122233'") == 1
+
+
+def test_emergency_words_get_immediate_108_reply(client):
+    res = _sim(client, "9812345671", "Papa ko seene mein dard ho raha hai")
+    assert res["action"] == "emergency"
+    assert "108" in db.scalar("SELECT body FROM messages WHERE template='emergency_reply'")
+    assert db.scalar("SELECT COUNT(*) FROM tasks WHERE title LIKE 'URGENT%'") == 1

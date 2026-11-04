@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
-from app import audit, config, db, messaging, patients, util
+from app import audit, auth, config, db, messaging, patients, util
 from app.ai import client as ai_client
 from app.ai import receptionist
 
@@ -48,6 +48,18 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
             patients.set_consent(p["id"], False, actor="webhook")
         return {"action": "consent_withdrawn", "patient_id": p["id"] if p else None}
 
+    if _looks_like_emergency(text):
+        # Fixed rule, runs before any AI: never make an emergency wait for a staff reply.
+        er = db.get_setting("emergency_phone", "")
+        _reply(phone, "emergency_reply",
+               "If this is an emergency, call 108 now or go to the nearest Emergency department."
+               + (f" Our Emergency desk: {er}." if er else "") + " Our team is also being alerted.\n"
+               "आपातकाल हो तो अभी 108 पर कॉल करें या नज़दीकी इमरजेंसी विभाग जाएँ।", p["id"] if p else None)
+        _task("followup_call", f"URGENT: possible emergency on WhatsApp from {p['name'] if p else phone}: {text[:80]}",
+              None, "message", inbound_id, now, now)
+        audit.log("webhook", "emergency_detected", "message", inbound_id)
+        return {"action": "emergency", "message_id": inbound_id}
+
     if p is None:
         lead = db.one("SELECT * FROM leads WHERE phone = ? AND status IN ('New','Contacted') ORDER BY id DESC LIMIT 1", (phone,))
         if lead:
@@ -82,7 +94,9 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
         if escalated:
             branch = db.scalar("SELECT branch_id FROM appointments WHERE id = ?", (appt_id,)) if appt_id else None
             _task("complaint", f"Low feedback score {score}/5 from {p['name']}", branch, "feedback", fid, now + timedelta(hours=24), now)
-            _reply(phone, "feedback_ack_low", "We are sorry your visit was not good. Our branch manager will call you today.", p["id"])
+            _reply(phone, "feedback_ack_low",
+                   "We are sorry your visit was not good. Our branch manager will call you today. "
+                   f"You are also welcome to share your experience on Google: {config.settings.review_link}", p["id"])
             return {"action": "feedback_low", "feedback_id": fid, "score": score}
         _reply(phone, "feedback_review_link",
                f"Thank you! Would you share your experience on Google? It helps other patients: {config.settings.review_link}", p["id"])
@@ -112,6 +126,20 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
     return {"action": "staff_followup", "message_id": inbound_id}
 
 
+EMERGENCY_WORDS = (
+    "emergency", "chest pain", "heart attack", "unconscious", "not breathing", "can't breathe", "cannot breathe",
+    "breathless", "heavy bleeding", "bleeding heavily", "accident", "stroke", "seizure", "fits", "fainted",
+    "suicide", "poison", "overdose", "snake bite", "burns",
+    "seene mein dard", "seene me dard", "saans nahi", "sans nahi", "behosh", "khoon beh",
+    "सीने में दर्द", "सांस नहीं", "बेहोश", "खून बह", "एक्सीडेंट", "दुर्घटना", "आपातकाल", "इमरजेंसी", "ज़हर", "जहर",
+)
+
+
+def _looks_like_emergency(text: str) -> bool:
+    t = " ".join(text.lower().split())
+    return any(w in t for w in EMERGENCY_WORDS)
+
+
 # ---------- Meta WhatsApp webhook ----------
 
 @router.get("/whatsapp")
@@ -138,6 +166,9 @@ def _extract_text(m: dict) -> str | None:
 async def receive(request: Request):
     raw = await request.body()
     secret = config.settings.whatsapp_app_secret
+    if not secret:
+        # Unsigned posts would let anyone fake patient replies (STOP, cancel). Demo replies use /simulate-inbound.
+        raise HTTPException(503, "Set TT_WHATSAPP_APP_SECRET to accept WhatsApp webhooks")
     if secret:
         sig = request.headers.get("X-Hub-Signature-256", "")
         expected = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
@@ -186,6 +217,18 @@ async def simulate_inbound(request: Request):
         raise HTTPException(404, "The simulator is only available in simulator mode")
     is_json = request.headers.get("content-type", "").startswith("application/json")
     data = await request.json() if is_json else dict(await request.form())
+    # Only logged-in staff (form + CSRF token) or a script holding the API key may fake patient messages.
+    key = config.settings.api_key
+    by_key = bool(key) and hmac.compare_digest(request.headers.get("X-API-Key", ""), key)
+    if not by_key:
+        user = auth.current_user(request)
+        if user is None:
+            if is_json:
+                raise HTTPException(401, "Log in, or send X-API-Key")
+            return RedirectResponse("/login", status_code=303)
+        token = data.get("csrf", "")
+        if not (isinstance(token, str) and hmac.compare_digest(token, user["csrf"])):
+            raise HTTPException(403, "This form has expired. Reload the page and try again.")
     phone, text = data.get("phone"), data.get("text")
     if not phone or not text:
         raise HTTPException(400, "Both 'phone' and 'text' are required")

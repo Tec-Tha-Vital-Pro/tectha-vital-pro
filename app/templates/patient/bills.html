@@ -1,0 +1,20 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Bills{% endblock %}
+{% block appbar %}<h1 class="appbar-title solo">Bills</h1>{% endblock %}
+{% block content %}
+<div class="card pad total {{ 'warn' if due_total > 0 else 'ok' }}">
+  <span class="label">{{ 'To pay' if due_total > 0 else 'All paid' }}</span>
+  <strong class="big num">{{ due_total|inr }}</strong>
+</div>
+<div class="card list">
+{% for b in bills %}
+  <a class="list-row link" href="/my/bills/{{ b.id }}">
+    <div><strong class="num">{{ b.total|inr }}</strong><p class="muted small">{{ b.created_at|day }} · {{ b.branch }} · <span class="num">{{ b.bill_no }}</span></p></div>
+    <span class="row-end">{% if b.balance > 0 %}<span class="pill warn num">{{ b.balance|inr }} due</span>{% else %}<span class="pill ok">Paid</span>{% endif %}{{ icon('chev') }}</span>
+  </a>
+{% else %}
+  <p class="pad muted">No bills yet.</p>
+{% endfor %}
+</div>
+{% endblock %}

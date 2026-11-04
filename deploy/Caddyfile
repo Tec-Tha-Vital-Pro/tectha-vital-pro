@@ -1,0 +1,35 @@
+# Caddy reverse proxy with automatic HTTPS (Let's Encrypt) for Tec Tha Care Connect.
+#
+# Needs: a domain (e.g. care.yourhospital.in) whose DNS A record points at this server,
+# and ports 80 and 443 open. Caddy gets and renews the certificate by itself.
+#
+#   Plain server:  TT_DOMAIN=care.yourhospital.in caddy run --config /etc/caddy/Caddyfile
+#                  (or put TT_DOMAIN in /etc/default/caddy for the caddy systemd service)
+#   Docker:        docker compose --profile https up -d   (sets TT_UPSTREAM=app:8000)
+
+{$TT_DOMAIN} {
+	encode gzip
+
+	# CSV imports are the largest uploads; 20 MB is plenty.
+	request_body {
+		max_size 20MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Developer API docs are not needed in production.
+	@devdocs path /docs /docs/* /redoc /openapi.json
+	respond @devdocs 404
+
+	reverse_proxy {$TT_UPSTREAM:127.0.0.1:8000}
+
+	# Access log goes to Caddy's own log (journalctl -u caddy / docker compose logs caddy).
+	# URLs can contain patient phone numbers: treat these logs as patient data.
+	log
+}

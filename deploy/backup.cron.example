@@ -1,0 +1,17 @@
+# Tec Tha Care Connect - cron jobs. Install with:  sudo cp deploy/backup.cron.example /etc/cron.d/tectha-care
+# (files in /etc/cron.d need the user column; times below are server time - check with `timedatectl`.
+#  An Indian VPS is often set to UTC: 21:00 UTC = 02:30 IST.)
+CRON_TZ=Asia/Kolkata
+MAILTO=root
+SHELL=/bin/bash
+
+# --- Plain server (systemd) -------------------------------------------------
+# Nightly backup at 02:30 IST, keep 30 days.
+30 2 * * * tectha TT_DB_PATH=/var/lib/tectha-care/tectha.db TT_BACKUP_DIR=/var/backups/tectha-care PYTHON=/opt/tectha-care/.venv/bin/python /opt/tectha-care/deploy/backup.sh >> /var/backups/tectha-care/backup.log 2>&1
+
+# Health check every 5 minutes (writes only on problems; set TT_HEALTHCHECK_PING_URL for email alerts).
+*/5 * * * * tectha TT_DB_PATH=/var/lib/tectha-care/tectha.db /opt/tectha-care/deploy/healthcheck.sh > /tmp/tectha-health.txt 2>&1 || cat /tmp/tectha-health.txt
+
+# --- Docker -----------------------------------------------------------------
+# Backup inside the container, then copy the newest file out to the host.
+# 30 2 * * * root cd /opt/tectha-care && docker compose exec -T app /app/deploy/backup.sh && docker compose cp app:/data/backups/. /var/backups/tectha-care/

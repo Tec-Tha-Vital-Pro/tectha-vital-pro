@@ -1,0 +1,38 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}My visits{% endblock %}
+{% block appbar %}<a class="backlink" href="/my/">{{ icon('back') }}<span>Home</span></a><h1 class="appbar-title">My visits</h1>{% endblock %}
+{% block content %}
+<section class="section">
+  <h2 class="section-title">Upcoming</h2>
+  {% for a in upcoming %}
+  <article class="card appt">
+    <div class="appt-top"><div><p class="appt-doc">{{ a.doctor }}</p><p class="muted">{{ a.specialty }}</p></div>
+      <span class="pill {{ 'ok' if a.status == 'Confirmed' else 'info' }}">{{ a.status }}</span></div>
+    <ul class="meta"><li>{{ icon('clock') }}<span>{{ a.starts_at|when }}</span></li><li>{{ icon('pin') }}<span>{{ a.branch }}</span></li></ul>
+    <form method="post" action="/my/appointments/{{ a.id }}/action" class="actions" data-once>
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/my/appointments">
+      {% if a.status != 'Confirmed' %}<button class="btn primary" name="action" value="confirm">Confirm</button>{% endif %}
+      <button class="btn" name="action" value="reschedule">Change time</button>
+      <button class="btn ghost danger" name="action" value="cancel">Cancel</button>
+    </form>
+  </article>
+  {% else %}
+  <div class="card pad empty"><p>No upcoming visits.</p><a class="btn primary" href="/my/book">Book an appointment</a></div>
+  {% endfor %}
+</section>
+<section class="section">
+  <h2 class="section-title">Past visits</h2>
+  <div class="card list">
+  {% for a in past %}
+    <div class="list-row">
+      <div><strong>{{ a.doctor }}</strong><p class="muted small">{{ a.starts_at|day }} · {{ a.branch }}</p></div>
+      {% if a.status == 'Visited' and not a.rated %}<a class="btn sm" href="/my/feedback/{{ a.id }}">Rate visit</a>
+      {% else %}<span class="pill {{ 'ok' if a.status == 'Visited' else 'muted' }}">{{ 'Missed' if a.status == 'NoShow' else a.status }}</span>{% endif %}
+    </div>
+  {% else %}
+    <p class="pad muted">No past visits yet.</p>
+  {% endfor %}
+  </div>
+</section>
+{% endblock %}

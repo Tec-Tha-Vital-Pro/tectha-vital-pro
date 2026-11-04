@@ -1,0 +1,47 @@
+# systemd unit for Tec Tha Care Connect on a small Linux VPS (no Docker).
+#
+# Install (as root; full steps in docs/DEPLOY.md):
+#   useradd --system --home /opt/tectha-care --shell /usr/sbin/nologin tectha
+#   git clone <repo> /opt/tectha-care && python3 -m venv /opt/tectha-care/.venv
+#   /opt/tectha-care/.venv/bin/pip install -r /opt/tectha-care/requirements.txt
+#   install -d -o tectha -g tectha -m 700 /var/lib/tectha-care /var/backups/tectha-care
+#   install -d -m 750 -g tectha /etc/tectha-care
+#   install -m 640 -g tectha .env.example /etc/tectha-care/env    then edit real values
+#   cp deploy/tectha-care.service /etc/systemd/system/ && systemctl daemon-reload
+#   systemctl enable --now tectha-care
+[Unit]
+Description=Tec Tha Care Connect
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tectha
+Group=tectha
+WorkingDirectory=/opt/tectha-care
+EnvironmentFile=/etc/tectha-care/env
+Environment=TT_DB_PATH=/var/lib/tectha-care/tectha.db
+Environment=TZ=Asia/Kolkata
+Environment=PYTHONUNBUFFERED=1
+# ONE worker only: the scheduler runs inside this process; more workers = duplicate WhatsApp sends.
+# Listens on localhost only; Caddy on the same machine handles HTTPS.
+ExecStart=/opt/tectha-care/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tectha-care
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

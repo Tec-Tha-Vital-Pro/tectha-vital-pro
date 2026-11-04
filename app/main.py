@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app import config, db, scheduler
-from app.routes import api, ui, webhooks
+from app.routes import api, patient_app, ui, webhooks
 
 HERE = Path(__file__).resolve().parent
 
@@ -28,3 +28,4 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 app.include_router(ui.router)
 app.include_router(api.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/webhooks")
+app.include_router(patient_app.router, prefix="/my")

@@ -2,7 +2,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app import automations, db, messaging, patients, scheduler, util
+import dataclasses
+
+from app import automations, config, db, messaging, patients, scheduler, util
 
 NOW = datetime(2026, 11, 4, 10, 0, 0)
 
@@ -76,7 +78,8 @@ def test_dues_stages(fresh_db):
     assert automations.dues_reminders(NOW)["sent"] == 1  # B-NEW is too young
     db.execute("UPDATE bills SET paid = total WHERE id = ?", (new_bill,))
     body = _msgs("dues_reminder")[0]["body"]
-    assert "₹4,000" in body and "https://pay.example.in/tectha/B-1001" in body and "Consultation" in body
+    assert "₹4,000" in body and "https://pay.example.in/tectha/B-1001" in body
+    assert "Consultation" not in body   # no health details on the lock screen
     assert automations.dues_reminders(NOW)["sent"] == 0  # stage 2 not due until day 10
 
     later = NOW + timedelta(days=7)  # age 11 days
@@ -143,7 +146,8 @@ def test_detect_unbilled_and_stuck_claims(fresh_db):
     assert automations.detect_stuck_claims(NOW) == {"tasks_created": 0}
 
 
-def test_daily_owner_report_once_after_9(fresh_db):
+def test_daily_owner_report_once_after_9(fresh_db, monkeypatch):
+    monkeypatch.setattr(config, "settings", dataclasses.replace(config.settings, owner_phone="919811100000"))
     p = _patient()
     _bill(p["id"], 2000, 0, NOW - timedelta(days=1))
     assert automations.daily_owner_report(NOW.replace(hour=8)) is None
@@ -160,6 +164,25 @@ def test_run_all_and_scheduler_tick(fresh_db):
     assert set(r) == {"appointment_reminders", "feedback_requests", "dues_reminders", "followup_reminders",
                       "detect_unbilled", "detect_stuck_claims", "daily_owner_report"}
     assert scheduler.tick() is not None
+
+
+def test_owner_report_skipped_without_owner_phone(fresh_db, monkeypatch):
+    monkeypatch.setattr(config, "settings", dataclasses.replace(config.settings, owner_phone=""))
+    assert automations.daily_owner_report(NOW) is None
+    assert db.one("SELECT * FROM audit_log WHERE action = 'owner_report_skipped'") is not None
+
+
+def test_quiet_hours_hold_patient_messages(fresh_db):
+    r = automations.run_all(NOW.replace(hour=22))
+    assert r["appointment_reminders"].startswith("quiet hours") and r["dues_reminders"].startswith("quiet hours")
+    assert isinstance(r["detect_stuck_claims"], dict)   # staff alerts still run
+
+
+def test_each_automation_can_be_switched_off(fresh_db):
+    automations.set_enabled("dues_reminders", False)
+    assert automations.run_all(NOW)["dues_reminders"] == "off"
+    automations.set_enabled("dues_reminders", True)
+    assert automations.run_all(NOW)["dues_reminders"] != "off"
 
 
 def test_scheduler_logs_errors(fresh_db, monkeypatch):

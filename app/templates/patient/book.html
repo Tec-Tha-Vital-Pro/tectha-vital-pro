@@ -1,0 +1,75 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Book a visit{% endblock %}
+{% block appbar %}
+{% if day %}<a class="backlink" href="/my/book?branch={{ branch.id }}&doctor={{ doctor.id }}">{{ icon('back') }}<span>Back</span></a>
+{% elif doctor %}<a class="backlink" href="/my/book?branch={{ branch.id }}">{{ icon('back') }}<span>Back</span></a>
+{% elif branch %}<a class="backlink" href="/my/book">{{ icon('back') }}<span>Back</span></a>
+{% else %}<a class="backlink" href="/my/">{{ icon('back') }}<span>Home</span></a>{% endif %}
+<h1 class="appbar-title">Book a visit</h1>
+{% endblock %}
+{% block content %}
+{% set step = 4 if day else 3 if doctor else 2 if branch else 1 %}
+<ol class="steps" aria-label="Booking steps">
+  {% for label in ['Branch', 'Doctor', 'Date', 'Time'] %}
+  <li class="{{ 'done' if loop.index < step else 'now' if loop.index == step else '' }}" {% if loop.index == step %}aria-current="step"{% endif %}><span>{{ loop.index }}</span>{{ label }}</li>
+  {% endfor %}
+</ol>
+
+{% if not branch %}
+  <h2 class="q">Which branch is easier for you?</h2>
+  <div class="choices">
+  {% for b in branches %}
+    <a class="card choice" href="/my/book?branch={{ b.id }}"><span class="round">{{ icon('pin') }}</span><span><strong>{{ b.name }}</strong><br><span class="muted">{{ hospital }}</span></span>{{ icon('chev') }}</a>
+  {% endfor %}
+  </div>
+{% elif not doctor %}
+  <h2 class="q">Choose a doctor at {{ branch.name }}</h2>
+  <div class="choices">
+  {% for d in doctors %}
+    <a class="card choice" href="/my/book?branch={{ branch.id }}&doctor={{ d.id }}">
+      <span class="avatar" aria-hidden="true">{{ d.name.replace('Dr. ', '')[:1] }}</span>
+      <span><strong>{{ d.name }}</strong><br><span class="muted">{{ d.specialty }} · Fee {{ d.fee|inr }}</span></span>{{ icon('chev') }}
+    </a>
+  {% else %}
+    <p class="muted">No doctors listed at this branch yet.</p>
+  {% endfor %}
+  </div>
+{% elif not day %}
+  <h2 class="q">When would you like to come?</h2>
+  <p class="muted sub">{{ doctor.name }} · {{ doctor.specialty }}</p>
+  <div class="days">
+  {% for d in days %}
+    <a class="day" href="/my/book?branch={{ branch.id }}&doctor={{ doctor.id }}&day={{ d.isoformat() }}">
+      <span class="dow">{{ 'Today' if d == today else d.strftime('%a') }}</span><strong class="num">{{ d.day }}</strong><span class="mon">{{ d.strftime('%b') }}</span>
+    </a>
+  {% endfor %}
+  </div>
+{% else %}
+  <h2 class="q">Pick a time</h2>
+  <p class="muted sub">{{ doctor.name }} · {{ day.strftime('%A') }} {{ day.day }} {{ day.strftime('%B') }}</p>
+  {% if slots %}
+  <form method="post" action="/my/book" class="stack" data-once>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="doctor_id" value="{{ doctor.id }}">
+    <input type="hidden" name="day" value="{{ day.isoformat() }}">
+    {% set morning = slots|select('lt', '13:00')|list %}{% set evening = slots|select('ge', '13:00')|list %}
+    {% for title, group in [('Morning', morning), ('Evening', evening)] if group %}
+    <fieldset class="slots"><legend>{{ title }}</legend>
+      {% for t in group %}
+      {% set h = t[:2]|int %}
+      <label class="slot"><input type="radio" name="slot" value="{{ t }}" required><span class="num">{{ (h - 12 if h > 12 else h) }}:{{ t[3:] }} {{ 'pm' if h >= 12 else 'am' }}</span></label>
+      {% endfor %}
+    </fieldset>
+    {% endfor %}
+    <div class="summary card pad">
+      <p><strong>{{ doctor.name }}</strong> · {{ doctor.specialty }}</p>
+      <p class="muted">{{ hospital }}, {{ branch.name }} · Fee {{ doctor.fee|inr }}, pay at the hospital</p>
+    </div>
+    <button class="btn primary block sticky-cta" type="submit">Confirm booking</button>
+  </form>
+  {% else %}
+  <div class="card pad empty"><p>No free times on this day.</p><a class="btn" href="/my/book?branch={{ branch.id }}&doctor={{ doctor.id }}">Choose another day</a></div>
+  {% endif %}
+{% endif %}
+{% endblock %}

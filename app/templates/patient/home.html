@@ -1,0 +1,72 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Home{% endblock %}
+{% block bodyclass %}home{% endblock %}
+{% block content %}
+<section class="greet">
+  <p class="greet-hi">{{ greet }}, <strong>{{ first_name }}</strong></p>
+  {% if nxt %}
+  <h1>Your appointment with {{ nxt.doctor }} is {{ nxt.phrase }}.</h1>
+  {% else %}
+  <h1>How can we help you today?</h1>
+  {% endif %}
+</section>
+
+{% if nxt %}
+<article class="ticket" aria-label="Next appointment">
+  <div class="ticket-main">
+    <div class="ticket-row">
+      <span class="eyebrow">{{ nxt.specialty }}</span>
+      <span class="status {{ 'ok' if nxt.status == 'Confirmed' else '' }}">{{ 'Confirmed' if nxt.status == 'Confirmed' else 'Please confirm' }}</span>
+    </div>
+    <p class="ticket-doc">{{ nxt.doctor }}</p>
+    <dl class="ticket-facts">
+      <div><dt>When</dt><dd>{{ nxt.starts_at|when }}</dd></div>
+      <div><dt>Where</dt><dd>{{ nxt.branch }}</dd></div>
+    </dl>
+  </div>
+  <div class="ticket-stub">
+    <div><span class="eyebrow">Token</span>{% if nxt.token_no %}<strong class="num">{{ nxt.token_no }}</strong>{% else %}<span class="stub-note">Given at check-in</span>{% endif %}</div>
+    <div><span class="eyebrow">Booking ID</span><span class="num mono">OPD-{{ nxt.id }}</span></div>
+  </div>
+</article>
+<form method="post" action="/my/appointments/{{ nxt.id }}/action" class="ticket-actions" data-once>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="back" value="/my/">
+  {% if nxt.status != 'Confirmed' %}
+  <button class="btn primary block" name="action" value="confirm">Yes, I'll be there</button>
+  {% endif %}
+  <div class="text-actions">
+    <button class="textbtn" name="action" value="reschedule">Change time</button>
+    <span aria-hidden="true">·</span>
+    <button class="textbtn danger" name="action" value="cancel">Cancel visit</button>
+  </div>
+</form>
+{% else %}
+<a class="btn primary block" href="/my/book">Book an appointment</a>
+{% endif %}
+
+{% if due_total > 0 %}
+<a class="notice" href="/my/bills">
+  <span class="notice-text"><strong class="num">{{ due_total|inr }}</strong> is pending on {{ dues|length }} bill{{ 's' if dues|length != 1 }}. Pay by UPI in a minute.</span>
+  <span class="notice-cta">Pay {{ icon('chev') }}</span>
+</a>
+{% endif %}
+
+{% if to_rate %}
+<a class="notice soft" href="/my/feedback/{{ to_rate.id }}">
+  <span class="notice-text">How was your visit with {{ to_rate.doctor }} on {{ to_rate.starts_at|day }}? It takes 10 seconds.</span>
+  <span class="notice-cta">Rate {{ icon('chev') }}</span>
+</a>
+{% endif %}
+
+<nav class="shortcuts" aria-label="Shortcuts">
+  <a href="/my/book">{{ icon('book') }}<span>Book a visit</span></a>
+  <a href="/my/reports">{{ icon('reports') }}<span>Reports</span></a>
+  <a href="/my/bills">{{ icon('bills') }}<span>Bills</span></a>
+  <a href="/my/appointments">{{ icon('clock') }}<span>My visits</span></a>
+</nav>
+
+<p class="help">{{ icon('chat') }}<span>Questions? Message {{ hospital }} on WhatsApp. The front desk replies between 8 am and 9 pm.</span></p>
+<p class="uid-foot">Patient ID <span class="num mono">{{ me.uid }}</span> · works at every branch</p>
+{% endblock %}

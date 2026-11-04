@@ -1,0 +1,36 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Rate your visit{% endblock %}
+{% block appbar %}<a class="backlink" href="/my/">{{ icon('back') }}<span>Home</span></a><h1 class="appbar-title">Your visit</h1>{% endblock %}
+{% block content %}
+{% if done %}
+  <div class="card pad center stack">
+    {% if done.score >= 4 %}
+      <span class="round lg ok">{{ icon('star') }}</span>
+      <h2>Thank you!</h2>
+      <p>We are glad your visit went well. Would you share it on Google? It helps other families find good care.</p>
+      <a class="btn primary block" href="{{ review_link }}" target="_blank" rel="noopener">Write a Google review</a>
+    {% else %}
+      <h2>Thank you for telling us</h2>
+      <p>We are sorry your visit was not good. Our branch manager will call you within a day.</p>
+    {% endif %}
+    <a class="link" href="/my/">Back to home</a>
+  </div>
+{% else %}
+<form method="post" class="stack" data-once>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="card pad stack">
+    <h2>How was your visit with {{ appt.doctor }}?</h2>
+    <p class="muted">{{ appt.starts_at|when }}</p>
+    <fieldset class="stars"><legend class="sr-only">Rating from 1 to 5</legend>
+      {% for n in range(1, 6) %}
+      <label><input type="radio" name="score" value="{{ n }}" required><span aria-hidden="true">{{ icon('star') }}</span><span class="sr-only">{{ n }} out of 5</span><small aria-hidden="true">{{ ['Poor','Not good','Okay','Good','Excellent'][n-1] }}</small></label>
+      {% endfor %}
+    </fieldset>
+    <label for="comment" class="field-label">Anything to tell us? (optional)</label>
+    <textarea id="comment" name="comment" rows="3" maxlength="1000"></textarea>
+  </div>
+  <button class="btn primary block" type="submit">Send</button>
+</form>
+{% endif %}
+{% endblock %}

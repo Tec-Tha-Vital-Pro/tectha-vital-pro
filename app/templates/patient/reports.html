@@ -1,0 +1,17 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Reports{% endblock %}
+{% block appbar %}<h1 class="appbar-title solo">Reports</h1>{% endblock %}
+{% block content %}
+<div class="card list">
+{% for r in reports %}
+  <a class="list-row link" href="/my/reports/{{ r.id }}">
+    <span class="round sm">{{ icon('reports') }}</span>
+    <div class="grow"><strong>{{ r.description }}</strong><p class="muted small">{{ r.dept }} · {{ r.created_at|day }} · {{ r.branch }}</p></div>
+    {{ icon('chev') }}
+  </a>
+{% else %}
+  <div class="pad empty"><p>No reports yet.</p><p class="muted small">When your lab or scan results are ready, they appear here and on WhatsApp.</p></div>
+{% endfor %}
+</div>
+{% endblock %}

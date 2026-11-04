@@ -90,7 +90,10 @@ class StageIn(BaseModel):
 
 @router.get("/health")
 def health() -> dict:
-    return {"ok": True}
+    """For uptime checks. 'scheduler_running' false means no reminders are going out."""
+    from app import scheduler
+    last = db.scalar("SELECT MAX(created_at) FROM audit_log WHERE actor = 'automation'")
+    return {"ok": True, "scheduler_running": scheduler.is_running(), "last_automation_activity": last}
 
 
 @router.post("/leads", dependencies=[Depends(require_key)])

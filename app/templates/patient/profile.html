@@ -1,0 +1,29 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Profile{% endblock %}
+{% block appbar %}<h1 class="appbar-title solo">Profile</h1>{% endblock %}
+{% block content %}
+<div class="card pad profile-head">
+  <span class="avatar lg" aria-hidden="true">{{ me.name[:1] }}</span>
+  <div><strong class="name">{{ me.name }}</strong><p class="muted">Patient ID <span class="num">{{ me.uid }}</span></p></div>
+</div>
+<div class="card list">
+  <div class="list-row"><span class="muted">Mobile</span><span class="num">+91 {{ me.phone[2:7] }} {{ me.phone[7:] }}</span></div>
+  {% if me.age %}<div class="list-row"><span class="muted">Age</span><span>{{ me.age }}</span></div>{% endif %}
+  <div class="list-row"><span class="muted">Valid at</span><span>All {{ hospital }} branches</span></div>
+</div>
+<h2 class="section-title">Family</h2>
+<div class="card pad"><p class="muted">Family members with their own mobile number log in on their own phone. To add a child or parent under your number, ask the front desk.</p></div>
+<h2 class="section-title">Messages</h2>
+<form method="post" action="/my/profile/consent" class="card pad toggle-row" data-once>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="consent" value="{{ '0' if me.consent_messages else '1' }}">
+  <div><strong>WhatsApp messages</strong><p class="muted small">Reminders, reports and bills on WhatsApp. {{ 'On' if me.consent_messages else 'Off' }} now.</p></div>
+  <button class="switch" type="submit" role="switch" aria-checked="{{ 'true' if me.consent_messages else 'false' }}" aria-label="WhatsApp messages"><span></span></button>
+</form>
+<form method="post" action="/my/logout" class="pad-t">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button class="btn block ghost danger" type="submit">Log out</button>
+</form>
+<p class="small muted center foot">{{ hospital }} · Tec Tha Care Connect</p>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "patient/base.html" %}
+{% from "patient/_icons.html" import icon %}
+{% block title %}Bill {{ bill.bill_no }}{% endblock %}
+{% block appbar %}<a class="backlink" href="/my/bills">{{ icon('back') }}<span>Bills</span></a><h1 class="appbar-title">Bill details</h1>{% endblock %}
+{% block content %}
+<div class="card receipt">
+  <div class="receipt-head">
+    <div><strong>{{ hospital }}</strong><p class="muted small">{{ bill.branch }}</p></div>
+    <div class="right"><span class="num small">{{ bill.bill_no }}</span><p class="muted small">{{ bill.created_at|day }}</p></div>
+  </div>
+  <table class="lines">
+    <caption class="sr-only">Bill items</caption>
+    <thead><tr><th scope="col">Item</th><th scope="col" class="r">Amount</th></tr></thead>
+    <tbody>
+    {% for it in items %}<tr><td>{{ it.description }}</td><td class="r num">{{ it.amount|inr }}</td></tr>{% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><th scope="row">Total</th><td class="r num">{{ bill.total|inr }}</td></tr>
+      {% for pay in payments %}<tr class="paid"><th scope="row">Paid · {{ pay.mode }} · {{ pay.paid_at|day }}</th><td class="r num">−{{ pay.amount|inr }}</td></tr>{% endfor %}
+      <tr class="bal"><th scope="row">Balance</th><td class="r num">{{ bill.balance|inr }}</td></tr>
+    </tfoot>
+  </table>
+</div>
+{% if bill.balance > 0 %}
+<a class="btn primary block sticky-cta" href="/my/bills/{{ bill.id }}/pay">Pay {{ bill.balance|inr }}</a>
+{% else %}
+<p class="center paid-stamp"><span class="pill ok">Fully paid</span></p>
+{% endif %}
+{% endblock %}
