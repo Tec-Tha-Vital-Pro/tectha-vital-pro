@@ -1,62 +1,89 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field, branch_filter %}
+{% from "_macros.html" import csrf_field, icon, empty %}
 {% block title %}Billing{% endblock %}
 {% block content %}
-<div class="head">
-  <div><h1>Billing follow-up</h1><p class="muted">Pending dues and services that never reached a bill. The billing software stays the source of truth.</p></div>
-  {{ branch_filter(branches, f_branch, '/billing', user) }}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Billing follow-up</h1>
+    <p class="muted">Dues to chase and services that never reached a bill. The hospital's billing software stays the source of truth.</p>
+  </div>
 </div>
-<div class="kpis">
-  <div class="kpi"><span class="label">Outstanding dues</span><span class="v num">{{ total_due|inr }}</span><span class="d muted">{{ dues|length }} bills</span></div>
-  <div class="kpi"><span class="label">Possibly unbilled</span><span class="v num">{{ total_unbilled|inr }}</span><span class="d muted">{{ unbilled|length }} services</span></div>
+
+<div class="kpi-strip two">
+  <div class="kpi-cell"><span class="label">Outstanding dues</span><span class="v num">{{ total_due|inr }}</span><span class="d">{{ dues|length }} bill{{ 's' if dues|length != 1 }} with a balance</span></div>
+  <div class="kpi-cell {{ 'bad' if total_unbilled }}"><span class="label">Possibly unbilled</span><span class="v num">{{ total_unbilled|inr }}</span><span class="d">{{ unbilled|length }} service{{ 's' if unbilled|length != 1 }} with no bill line</span></div>
 </div>
-<section class="panel">
-  <h2>Pending dues</h2>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>Bill</th><th>Patient</th><th>Branch</th><th class="r">Balance</th><th class="r">Age</th><th class="r">Reminders</th><th></th><th>Record payment</th></tr></thead>
-    <tbody>
-    {% for d in dues %}
-    <tr>
-      <td class="num">{{ d.bill_no }}</td>
-      <td><strong>{{ d.name }}</strong><br><span class="muted small">{{ d.uid }} · {{ d.phone }}</span></td>
-      <td>{% for b in branches if b.id == d.branch_id %}{{ b.name }}{% endfor %}</td>
-      <td class="r num"><strong>{{ d.balance|inr }}</strong></td>
-      <td class="r num"><span class="pill {{ 'p-bad' if d.age_days > 45 else ('p-warn' if d.age_days > 14 else 'p-info') }}">{{ d.age_days }} d</span></td>
-      <td class="r num">{{ d.reminders_sent }}</td>
-      <td><form method="post" action="/billing/{{ d.id }}/remind">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">Send reminder now</button></form></td>
-      <td>
-        <form method="post" action="/billing/{{ d.id }}/payment" class="row-form">
-          {{ csrf_field(csrf) }}
-          <input name="amount" type="number" min="1" max="{{ d.balance }}" value="{{ d.balance }}" aria-label="Amount for {{ d.bill_no }}" class="amt">
-          <select name="mode" aria-label="Mode">{% for m in modes %}<option>{{ m }}</option>{% endfor %}</select>
-          <button class="btn sm primary" type="submit">Save</button>
-        </form>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="8" class="muted">No pending dues.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
+
+<section class="sec" aria-labelledby="dues-h">
+  <div class="sec-head">
+    <h2 id="dues-h">Pending dues</h2>
+    <span class="muted small">Oldest first. Reminders go out automatically on day 3, 10 and 21; send one now if the patient asked.</span>
+  </div>
+  <div class="tbl-wrap cards">
+    <table>
+      <thead><tr><th>Bill</th><th>Patient</th><th>Branch</th><th class="r">Balance</th><th class="r">Age</th><th class="r">Reminders</th><th class="r">Actions</th></tr></thead>
+      <tbody>
+      {% for d in dues %}
+      <tr>
+        <td class="num mono-id" data-label="Bill">{{ d.bill_no }}</td>
+        <td class="lead-cell"><span class="name-link">{{ d.patient_name or d.name }}</span><span class="sub"><span class="uid-sm">{{ d.uid }}</span> · <span class="num">+{{ d.phone[:2] }} {{ d.phone[2:7] }} {{ d.phone[7:] }}</span></span></td>
+        <td data-label="Branch">{% for b in branches if b.id == d.branch_id %}{{ b.name }}{% endfor %}</td>
+        <td class="r num" data-label="Balance"><strong>{{ d.balance|inr }}</strong></td>
+        <td class="r num" data-label="Age"><span class="age {{ 'bad' if d.age_days > 45 else ('warn' if d.age_days > 14 else '') }}">{{ d.age_days }} days</span></td>
+        <td class="r num" data-label="Reminders">{{ d.reminders_sent }}{% if d.last_reminder_at %}<span class="sub">last {{ d.last_reminder_at[8:10] }}/{{ d.last_reminder_at[5:7] }}</span>{% endif %}</td>
+        <td class="actions r" data-label="">
+          <form method="post" action="/billing/{{ d.id }}/remind">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ icon('send') }} Send reminder now</button></form>
+          <button type="button" class="btn sm primary" data-open="pay-{{ d.id }}">Record payment</button>
+          <dialog id="pay-{{ d.id }}" class="slide" aria-labelledby="pay-h-{{ d.id }}">
+            <div class="dlg-head"><h2 id="pay-h-{{ d.id }}">Record payment</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+            <div class="dlg-body">
+              <dl class="facts">
+                <div><dt>Bill</dt><dd class="num">{{ d.bill_no }}</dd></div>
+                <div><dt>Patient</dt><dd>{{ d.patient_name or d.name }} · {{ d.uid }}</dd></div>
+                <div><dt>Balance</dt><dd class="num"><strong>{{ d.balance|inr }}</strong></dd></div>
+              </dl>
+              <form method="post" action="/billing/{{ d.id }}/payment" class="stack">
+                {{ csrf_field(csrf) }}
+                <label for="amt-{{ d.id }}">Amount received (₹)<input id="amt-{{ d.id }}" name="amount" type="number" min="1" max="{{ d.balance }}" value="{{ d.balance }}" class="amt" inputmode="numeric"></label>
+                <label for="mode-{{ d.id }}">Mode<select id="mode-{{ d.id }}" name="mode">{% for m in modes %}<option>{{ m }}</option>{% endfor %}</select></label>
+                <button class="btn primary" type="submit">Save payment</button>
+              </form>
+            </div>
+          </dialog>
+        </td>
+      </tr>
+      {% else %}
+      <tr class="empty-row"><td colspan="7" class="empty-cell">{{ empty('rupee', 'No pending dues', 'Every bill is fully paid. New balances appear when the billing software sends bills or a CSV is imported.') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
-<section class="panel">
-  <h2>Possibly unbilled services</h2>
-  <p class="muted small">Done in lab, pharmacy or ward, with no matching line on any bill.</p>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>Done on</th><th>Patient</th><th>Department</th><th>Service</th><th>Branch</th><th class="r">Amount</th><th></th></tr></thead>
-    <tbody>
-    {% for o in unbilled %}
-    <tr>
-      <td class="num nowrap">{{ o.created_at[:16] }}</td>
-      <td><strong>{{ o.name }}</strong><br><span class="muted small">{{ o.uid }}</span></td>
-      <td>{{ o.dept }}</td><td>{{ o.description }}</td><td>{{ o.branch_name }}</td>
-      <td class="r num">{{ o.amount|inr }}</td>
-      <td><form method="post" action="/billing/orders/{{ o.id }}/add">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Add to bill</button></form></td>
-    </tr>
-    {% else %}
-    <tr><td colspan="7" class="muted">Nothing unbilled. Every service is on a bill.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
+
+<section class="sec" id="unbilled" aria-labelledby="unb-h">
+  <div class="sec-head">
+    <h2 id="unb-h">Possibly unbilled services</h2>
+    <span class="muted small">Done in lab, pharmacy or ward with no matching line on any bill. Check the case sheet, then add.</span>
+  </div>
+  <div class="tbl-wrap cards">
+    <table>
+      <thead><tr><th>Done on</th><th>Patient</th><th>Dept</th><th>Service</th><th>Branch</th><th class="r">Amount</th><th class="r"></th></tr></thead>
+      <tbody>
+      {% for o in unbilled %}
+      <tr>
+        <td class="num nowrap muted" data-label="Done on">{{ o.created_at[8:10] }}/{{ o.created_at[5:7] }} {{ o.created_at[11:16] }}</td>
+        <td class="lead-cell"><span class="name-link">{{ o.name }}</span><span class="sub"><span class="uid-sm">{{ o.uid }}</span></span></td>
+        <td data-label="Dept"><span class="dept">{{ o.dept }}</span></td>
+        <td data-label="Service">{{ o.description }}</td>
+        <td data-label="Branch">{{ o.branch_name }}</td>
+        <td class="r num" data-label="Amount"><strong>{{ o.amount|inr }}</strong></td>
+        <td class="actions r" data-label=""><form method="post" action="/billing/orders/{{ o.id }}/add">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Add to bill</button></form></td>
+      </tr>
+      {% else %}
+      <tr class="empty-row"><td colspan="7" class="empty-cell">{{ empty('check', 'Nothing unbilled', 'Every lab, pharmacy and ward order is on a bill.') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

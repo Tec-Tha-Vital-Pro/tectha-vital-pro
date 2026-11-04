@@ -202,3 +202,11 @@ def test_scheduler_start_twice_single_thread(fresh_db, monkeypatch):
     assert scheduler._thread is t1 and scheduler.is_running()
     scheduler.stop()
     assert not scheduler.is_running()
+
+
+def test_old_bill_does_not_get_stages_back_to_back(fresh_db):
+    p = _patient()
+    _bill(p["id"], 3000, 0, NOW - timedelta(days=40))          # e.g. imported late
+    assert automations.dues_reminders(NOW)["sent"] == 1
+    assert automations.dues_reminders(NOW + timedelta(minutes=1))["sent"] == 0
+    assert automations.dues_reminders(NOW + timedelta(days=6))["sent"] == 1

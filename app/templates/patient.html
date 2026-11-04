@@ -1,62 +1,79 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field, status_pill %}
+{% from "_macros.html" import csrf_field, status_pill, icon %}
 {% block title %}{{ p.name }}{% endblock %}
 {% block content %}
-<div class="head">
-  <div>
-    <span class="label">{{ p.uid }}</span>
-    <h1>{{ p.name }}</h1>
-    <p class="muted num">{{ p.phone }}{% if p.age %} · {{ p.age }} years{% endif %}{% if p.gender %} · {{ p.gender }}{% endif %}{% if p.abha_id %} · ABHA {{ p.abha_id }}{% endif %}</p>
+{% set due = namespace(v=0) %}{% for b in bills %}{% set due.v = due.v + (b.total - b.paid) %}{% endfor %}
+<a class="crumb" href="/patients">{{ icon('chev-left', cls='ic xs') }} Patients</a>
+<div class="page-head">
+  <div class="profile-head">
+    <span class="profile-av" aria-hidden="true">{{ p.name[:1]|upper }}{{ (p.name.split(' ')[1][:1] if ' ' in p.name else '')|upper }}</span>
+    <div class="page-title">
+      <span class="uid">{{ p.uid }}</span>
+      <h1>{{ p.name }}</h1>
+      <p class="muted num">+{{ p.phone[:2] }} {{ p.phone[2:7] }} {{ p.phone[7:] }}{% if p.age %} · {{ p.age }} yrs{% endif %}{% if p.gender %} · {{ p.gender }}{% endif %}{% if p.abha_id %} · ABHA {{ p.abha_id }}{% endif %}</p>
+    </div>
   </div>
-  <form method="post" action="/patients/{{ p.id }}/consent" class="consent">
+  <form method="post" action="/patients/{{ p.id }}/consent" class="consent-box">
     {{ csrf_field(csrf) }}
     {% if p.consent_messages %}
       <span class="pill p-ok">WhatsApp consent given {{ (p.consent_at or '')[:10] }}</span>
-      <input type="hidden" name="consent" value="0"><button class="btn sm" type="submit">Withdraw consent</button>
+      <input type="hidden" name="consent" value="0"><button class="btn sm ghost danger" type="submit">Withdraw consent</button>
     {% else %}
       <span class="pill p-muted">No consent: no messages are sent</span>
       <input type="hidden" name="consent" value="1"><button class="btn sm primary" type="submit">Record consent</button>
     {% endif %}
   </form>
 </div>
-<div class="grid-2">
-  <section class="panel">
-    <h2>Appointments</h2>
-    <ul class="timeline">
-      {% for a in appts %}
-      <li><span class="num">{{ a.starts_at[:16] }}</span> · {{ a.doctor }} · {{ a.branch_name }} {{ status_pill(a.status) }}</li>
-      {% else %}<li class="muted">No appointments yet.</li>{% endfor %}
-    </ul>
-  </section>
-  <section class="panel">
-    <h2>Bills</h2>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Bill</th><th>Date</th><th>Branch</th><th class="r">Total</th><th class="r">Balance</th></tr></thead>
-      <tbody>
-      {% for b in bills %}
-      <tr><td class="num">{{ b.bill_no }}</td><td class="num">{{ b.created_at[:10] }}</td><td>{{ b.branch_name }}</td><td class="r num">{{ b.total|inr }}</td>
-      <td class="r num">{% if b.total > b.paid %}<span class="pill p-warn">{{ (b.total - b.paid)|inr }}</span>{% else %}<span class="pill p-ok">Paid</span>{% endif %}</td></tr>
-      {% else %}<tr><td colspan="5" class="muted">No bills yet.</td></tr>{% endfor %}
-      </tbody>
-    </table></div>
-  </section>
-</div>
-<div class="grid-2">
-  <section class="panel">
-    <h2>Messages</h2>
-    <div class="chat compact">
-      {% for m in msgs|reverse %}
-      <div class="bubble {{ 'out' if m.direction == 'out' else 'in' }}"><span class="body">{{ m.body }}</span><span class="meta">{{ m.created_at[5:16] }} · {{ status_pill(m.status) }}</span></div>
-      {% else %}<p class="muted">No messages yet.</p>{% endfor %}
-    </div>
-  </section>
-  <section class="panel">
-    <h2>Feedback</h2>
-    <ul class="timeline">
-      {% for f in feedback %}
-      <li><span class="num">{{ f.created_at[:10] }}</span> · Score <strong>{{ f.score }}/5</strong>{% if f.comment %} · {{ f.comment }}{% endif %}{% if f.escalated %} <span class="pill p-bad">Escalated</span>{% endif %}</li>
-      {% else %}<li class="muted">No feedback yet.</li>{% endfor %}
-    </ul>
-  </section>
+
+<dl class="kpi-strip profile-strip">
+  <div class="kpi-cell"><dt class="label">Visits</dt><dd class="v num">{{ appts|selectattr('status', 'equalto', 'Visited')|list|length }}</dd></div>
+  <div class="kpi-cell"><dt class="label">Bills</dt><dd class="v num">{{ bills|length }}</dd></div>
+  <div class="kpi-cell {{ 'bad' if due.v }}"><dt class="label">Balance due</dt><dd class="v num">{{ due.v|inr }}</dd></div>
+  <div class="kpi-cell"><dt class="label">Feedback</dt><dd class="v num">{% if feedback %}{{ feedback[0].score }}/5{% else %}—{% endif %}</dd></div>
+</dl>
+
+<div class="grid-3-2">
+  <div>
+    <section class="sec" aria-labelledby="ap-h">
+      <div class="sec-head"><h2 id="ap-h">Appointments</h2><span class="muted small">All branches</span></div>
+      <ul class="timeline">
+        {% for a in appts %}
+        <li><span class="when">{{ a.starts_at[8:10] }}/{{ a.starts_at[5:7] }}/{{ a.starts_at[:4] }} {{ a.starts_at[11:16] }}</span><span class="what">{{ a.doctor }} <span class="muted">· {{ a.branch_name }}{% if a.token_no %} · token {{ a.token_no }}{% endif %}</span></span>{{ status_pill(a.status) }}</li>
+        {% else %}<li class="muted">No appointments yet.</li>{% endfor %}
+      </ul>
+    </section>
+    <section class="sec" aria-labelledby="bl-h">
+      <div class="sec-head"><h2 id="bl-h">Bills</h2></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Bill</th><th>Date</th><th>Branch</th><th class="r">Total</th><th class="r">Balance</th></tr></thead>
+          <tbody>
+          {% for b in bills %}
+          <tr><td class="mono-id">{{ b.bill_no }}</td><td class="num muted">{{ b.created_at[8:10] }}/{{ b.created_at[5:7] }}/{{ b.created_at[:4] }}</td><td>{{ b.branch_name }}</td><td class="r num">{{ b.total|inr }}</td>
+          <td class="r num">{% if b.total > b.paid %}<strong class="warn-text">{{ (b.total - b.paid)|inr }}</strong>{% else %}<span class="pill p-ok">Paid</span>{% endif %}</td></tr>
+          {% else %}<tr><td colspan="5" class="muted">No bills yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <div>
+    <section class="sec" aria-labelledby="ms-h">
+      <div class="sec-head"><h2 id="ms-h">WhatsApp</h2><a class="small" href="/messages?phone={{ p.phone }}">Open conversation</a></div>
+      <div class="chat compact">
+        {% for m in msgs|reverse %}
+        <div class="bubble {{ 'out' if m.direction == 'out' else 'in' }}"><span class="body">{{ m.body }}</span><span class="meta"><span class="num">{{ m.created_at[8:10] }}/{{ m.created_at[5:7] }} {{ m.created_at[11:16] }}</span>{{ status_pill(m.status) }}</span></div>
+        {% else %}<p class="muted small">No messages yet.</p>{% endfor %}
+      </div>
+    </section>
+    <section class="sec" aria-labelledby="fb-h">
+      <div class="sec-head"><h2 id="fb-h">Feedback</h2></div>
+      <ul class="timeline">
+        {% for f in feedback %}
+        <li><span class="when">{{ f.created_at[8:10] }}/{{ f.created_at[5:7] }}/{{ f.created_at[:4] }}</span><span class="what"><span class="score s{{ f.score }}">{{ f.score }}/5</span>{% if f.comment %} {{ f.comment }}{% endif %}</span>{% if f.escalated %}<span class="pill p-bad">Escalated</span>{% endif %}</li>
+        {% else %}<li class="muted">No feedback yet.</li>{% endfor %}
+      </ul>
+    </section>
+  </div>
 </div>
 {% endblock %}

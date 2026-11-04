@@ -1,42 +1,49 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field %}
+{% from "_macros.html" import csrf_field, icon %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<div class="head"><div><h1>Settings</h1></div></div>
-<div class="grid-2">
-  <section class="panel">
-    <h2>Hospital and branch names</h2>
+<div class="page-head"><div class="page-title"><h1>Settings</h1><p class="muted">Names, automations and staff logins for {{ hospital }}.</p></div></div>
+
+<div class="settings-grid">
+  <section class="sec" aria-labelledby="st-auto">
+    <div class="sec-head"><h2 id="st-auto">Automations</h2>
+      <span class="pill {{ 'p-warn' if mode == 'simulator' else 'p-ok' }}">WhatsApp: {{ 'Simulator, no real messages' if mode == 'simulator' else 'Live' }}</span></div>
+    <p class="muted small">Reminders (24 h and 2 h), dues follow-up on day 3, 10 and 21, feedback requests, unbilled and TPA checks, and the 9 am owner report run every minute on their own.</p>
+    <form method="post" action="/settings/run-automations" class="mt">{{ csrf_field(csrf) }}<button class="btn primary" type="submit">Run automations now</button></form>
+  </section>
+
+  <section class="sec" aria-labelledby="st-names">
+    <div class="sec-head"><h2 id="st-names">Hospital and branches</h2></div>
     <form method="post" action="/settings/names" class="stack">
       {{ csrf_field(csrf) }}
       <label for="s-h">Hospital name<input id="s-h" name="hospital_name" value="{{ hospital }}" required></label>
+      <div class="two-col">
       {% for b in branches %}<label for="s-b{{ b.id }}">Branch {{ b.id }}<input id="s-b{{ b.id }}" name="branch_{{ b.id }}" value="{{ b.name }}"></label>{% endfor %}
-      <button class="btn primary" type="submit">Save names</button>
+      </div>
+      <div><button class="btn" type="submit">Save names</button></div>
     </form>
   </section>
-  <section class="panel">
-    <h2>Automations</h2>
-    <p>WhatsApp mode: <span class="pill {{ 'p-warn' if mode == 'simulator' else 'p-ok' }}">{{ 'Simulator (no real messages)' if mode == 'simulator' else 'Live' }}</span></p>
-    <p class="muted small">Reminders, dues follow-up, claim checks and the owner report run every minute on their own. Run them now to see the effect immediately.</p>
-    <form method="post" action="/settings/run-automations">{{ csrf_field(csrf) }}<button class="btn primary" type="submit">Run automations now</button></form>
-  </section>
 </div>
-<section class="panel">
-  <h2>Staff logins</h2>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Branch</th><th>Status</th></tr></thead>
-    <tbody>
-    {% for u in users %}
-    <tr><td>{{ u.username }}</td><td>{{ u.full_name }}</td><td>{{ u.role }}</td><td>{{ u.branch_name or 'All branches' }}</td><td>{% if u.active %}<span class="pill p-ok">Active</span>{% else %}<span class="pill p-muted">Disabled</span>{% endif %}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  <h3>Add a staff login</h3>
+
+<section class="sec" aria-labelledby="st-users">
+  <div class="sec-head"><h2 id="st-users">Staff logins</h2><span class="muted small">One login per person. No shared accounts.</span></div>
+  <div class="tbl-wrap cards">
+    <table>
+      <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Branch</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for u in users %}
+      <tr><td class="mono-id" data-label="Username">{{ u.username }}</td><td class="lead-cell"><strong>{{ u.full_name }}</strong></td><td data-label="Role">{{ u.role|capitalize }}</td><td data-label="Branch">{{ u.branch_name or 'All branches' }}</td><td data-label="Status">{% if u.active %}<span class="pill p-ok">Active</span>{% else %}<span class="pill p-muted">Disabled</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h3 class="sub-h">Add a staff login</h3>
   <form method="post" action="/settings/users" class="grid-form">
     {{ csrf_field(csrf) }}
-    <label for="u-name">Username<input id="u-name" name="username" required autocomplete="off"></label>
+    <label for="u-name">Username<input id="u-name" name="username" required autocomplete="off" autocapitalize="none"></label>
     <label for="u-full">Full name<input id="u-full" name="full_name" required></label>
-    <label for="u-pass">Password (8+ characters)<input id="u-pass" name="password" type="password" minlength="8" required autocomplete="new-password"></label>
-    <label for="u-role">Role<select id="u-role" name="role">{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></label>
+    <label for="u-pass">Password <span class="hint">8+ characters</span><input id="u-pass" name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+    <label for="u-role">Role<select id="u-role" name="role">{% for r in roles %}<option value="{{ r }}">{{ r|capitalize }}</option>{% endfor %}</select></label>
     <label for="u-br">Branch<select id="u-br" name="branch_id"><option value="">All branches</option>{% for b in branches %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}</select></label>
     <button class="btn primary" type="submit">Add login</button>
   </form>

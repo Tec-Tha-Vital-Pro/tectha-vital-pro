@@ -1,58 +1,74 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field, status_pill %}
+{% from "_macros.html" import csrf_field, status_pill, icon, qs, empty %}
 {% block title %}Enquiries{% endblock %}
 {% block content %}
-<div class="head">
-  <div>
+<div class="page-head">
+  <div class="page-title">
     <h1>Enquiries</h1>
-    <p class="muted">Every enquiry from every channel, with its source and branch.</p>
+    <p class="muted">WhatsApp, website, ads and Practo arrive here on their own. Add walk-ins and calls yourself.</p>
+  </div>
+  <div class="page-actions">
+    <button type="button" class="btn primary" data-open="new-lead">{{ icon('plus') }} New enquiry</button>
   </div>
 </div>
-<div class="grid-side">
-  <section class="panel">
-    <form method="get" action="/leads" class="filters">
-      <select name="source" aria-label="Source"><option value="">All sources</option>{% for s in sources %}<option {% if s == f_source %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
-      <select name="status" aria-label="Status"><option value="">All statuses</option>{% for s in statuses %}<option {% if s == f_status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
-      {% if not user.branch_id %}<select name="branch" aria-label="Branch"><option value="">All branches</option>{% for b in branches %}<option value="{{ b.id }}" {% if b.id == f_branch %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select>{% endif %}
-      <button class="btn sm" type="submit">Filter</button>
-    </form>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Received</th><th>Name</th><th>Need</th><th>Source</th><th>Branch</th><th>First reply</th><th>Status</th></tr></thead>
-      <tbody>
-      {% for l in rows %}
-      <tr>
-        <td class="num nowrap">{{ l.created_at[5:16] }}</td>
-        <td><strong>{{ l.name }}</strong><br><span class="muted small num">{{ l.phone }}</span></td>
-        <td>{{ l.need or '' }}</td>
-        <td>{{ l.source }}</td>
-        <td>{{ l.branch_name or '—' }}</td>
-        <td class="num">{% if l.first_reply_seconds is none %}<span class="pill p-bad">Waiting</span>{% elif l.first_reply_seconds < 60 %}{{ l.first_reply_seconds }} s{% elif l.first_reply_seconds < 3600 %}{{ l.first_reply_seconds // 60 }} min{% else %}{{ l.first_reply_seconds // 3600 }} h{% endif %}</td>
-        <td>
-          <form method="post" action="/leads/{{ l.id }}/status" class="row-form">
-            {{ csrf_field(csrf) }}
-            <select name="status" aria-label="Status for {{ l.name }}">{% for s in statuses %}<option {% if s == l.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
-            <button class="btn sm" type="submit">Save</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7" class="muted">No enquiries match these filters.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-  </section>
-  <section class="panel">
-    <h2>Add an enquiry</h2>
-    <p class="muted small">For walk-ins and calls. WhatsApp, website and ad enquiries arrive here automatically.</p>
+
+<div class="filterbar">
+  <div class="chips" role="group" aria-label="Status">
+    <a class="chip" href="{{ qs('/leads', query, 'status', '') }}" {% if not f_status %}aria-current="true"{% endif %}>All</a>
+    {% for s in statuses %}<a class="chip" href="{{ qs('/leads', query, 'status', s) }}" {% if s == f_status %}aria-current="true"{% endif %}>{{ s }}</a>{% endfor %}
+  </div>
+  <form method="get" action="/leads" class="inline-filter">
+    {% for k, v in query.items() if k not in ('source', 'msg', 'err') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <label for="f-source" class="sr-only">Source</label>
+    <select id="f-source" name="source" data-autosubmit><option value="">All sources</option>{% for s in sources %}<option {% if s == f_source %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    <noscript><button class="btn sm" type="submit">Filter</button></noscript>
+  </form>
+  <span class="muted small count-note">{{ rows|length }} shown</span>
+</div>
+
+<div class="tbl-wrap cards">
+  <table>
+    <thead><tr><th>Received</th><th>Name</th><th>Need</th><th>Source</th><th>Branch</th><th class="r">First reply</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for l in rows %}
+    <tr>
+      <td class="num nowrap muted" data-label="Received">{{ l.created_at[8:10] }}/{{ l.created_at[5:7] }} {{ l.created_at[11:16] }}</td>
+      <td class="lead-cell"><span class="name-link">{{ l.name }}</span><span class="sub num">+{{ l.phone[:2] }} {{ l.phone[2:7] }} {{ l.phone[7:] }}</span></td>
+      <td data-label="Need">{{ l.need or '—' }}</td>
+      <td data-label="Source"><span class="src">{{ l.source }}</span></td>
+      <td data-label="Branch">{{ l.branch_name or '—' }}</td>
+      <td class="num r" data-label="First reply">{% if l.first_reply_seconds is none %}<span class="pill p-bad">Waiting</span>{% elif l.first_reply_seconds < 60 %}{{ l.first_reply_seconds }} s{% elif l.first_reply_seconds < 3600 %}{{ l.first_reply_seconds // 60 }} min{% else %}<span class="warn-text">{{ l.first_reply_seconds // 3600 }} h</span>{% endif %}</td>
+      <td data-label="Status">
+        <form method="post" action="/leads/{{ l.id }}/status" class="row-form status-form">
+          {{ csrf_field(csrf) }}
+          <label for="ls-{{ l.id }}" class="sr-only">Status for {{ l.name }}</label>
+          <select id="ls-{{ l.id }}" name="status" class="status-sel s-{{ l.status|lower }}" data-autosubmit>{% for s in statuses %}<option {% if s == l.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+          <noscript><button class="btn sm" type="submit">Save</button></noscript>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr class="empty-row"><td colspan="7" class="empty-cell">{{ empty('inbox', 'No enquiries match these filters', 'Clear the filters, or add a walk-in with New enquiry. Enquiries from WhatsApp and the website appear here within seconds.') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog id="new-lead" class="slide" aria-labelledby="new-lead-h">
+  <div class="dlg-head"><h2 id="new-lead-h">New enquiry</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+  <div class="dlg-body">
+    <p class="muted small">For walk-ins and phone calls. The patient keeps one ID across branches, matched on mobile number.</p>
     <form method="post" action="/leads" class="stack">
       {{ csrf_field(csrf) }}
-      <label for="l-name">Name<input id="l-name" name="name" required></label>
-      <label for="l-phone">Mobile number<input id="l-phone" name="phone" inputmode="tel" placeholder="98765 43210" required></label>
-      <label for="l-need">What they need<input id="l-need" name="need" placeholder="e.g. Knee pain, ortho"></label>
-      <label for="l-source">Source<select id="l-source" name="source">{% for s in sources %}<option>{{ s }}</option>{% endfor %}</select></label>
-      {% if not user.branch_id %}<label for="l-branch">Branch<select id="l-branch" name="branch_id">{% for b in branches %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}</select></label>{% endif %}
+      <label for="l-name">Name<input id="l-name" name="name" autocomplete="off" required></label>
+      <label for="l-phone">Mobile number<input id="l-phone" name="phone" inputmode="tel" placeholder="98765 43210" autocomplete="off" required></label>
+      <label for="l-need">What they need<input id="l-need" name="need" placeholder="Knee pain, wants ortho OPD"></label>
+      <div class="two-col">
+        <label for="l-source">Source<select id="l-source" name="source">{% for s in sources %}<option {% if s == 'Walk-in' %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+        {% if not user.branch_id %}<label for="l-branch">Branch<select id="l-branch" name="branch_id">{% for b in branches %}<option value="{{ b.id }}" {% if b.id == f_branch %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></label>{% endif %}
+      </div>
       <button class="btn primary" type="submit">Add enquiry</button>
     </form>
-  </section>
-</div>
+  </div>
+</dialog>
 {% endblock %}

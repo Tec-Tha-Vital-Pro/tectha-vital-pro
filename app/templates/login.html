@@ -1,17 +1,36 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Log in{% endblock %}
 {% block content %}
-<section class="login">
-  <div class="panel">
-    <h1>Log in</h1>
-    <p class="muted">Staff access to {{ hospital }}'s patient communication and billing follow-up.</p>
-    {% if login_error %}<div class="flash bad" role="alert">{{ login_error }}</div>{% endif %}
-    <form method="post" action="/login" class="stack">
-      <input type="hidden" name="next" value="{{ next }}">
-      <label for="username">Username<input id="username" name="username" autocomplete="username" value="{{ username or '' }}" required autofocus></label>
-      <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
-      <button class="btn primary" type="submit">Log in</button>
-    </form>
-  </div>
-</section>
+<div class="login-wrap">
+  <section class="login-art" aria-label="About Tec Tha Care Connect">
+    <div class="brand">
+      <img class="mark" src="/static/icons/icon-192.png" alt="" width="40" height="40">
+      <span class="brand-text"><strong>Tec Tha</strong><small>Care Connect</small></span>
+    </div>
+    <div>
+      <h2>Every enquiry answered, every rupee <em>followed up</em>.</h2>
+      <ul class="login-points">
+        <li>{{ icon('chat') }} WhatsApp reminders, reports and dues in one place</li>
+        <li>{{ icon('users') }} One patient ID across every branch</li>
+        <li>{{ icon('shield') }} TPA claims tracked against IRDAI time limits</li>
+      </ul>
+    </div>
+    <small>{{ hospital }} · patient data stays on the hospital's own server</small>
+  </section>
+  <section class="login-form">
+    <div class="login-card">
+      <h1>Log in</h1>
+      <p class="muted">Staff access for {{ hospital }}. Use your own login; every action is recorded.</p>
+      {% if login_error %}<div class="err-box" role="alert">{{ icon('alert') }} {{ login_error }}</div>{% endif %}
+      <form method="post" action="/login" class="stack">
+        <input type="hidden" name="next" value="{{ next }}">
+        <label for="username">Username<input id="username" name="username" autocomplete="username" autocapitalize="none" value="{{ username or '' }}" required autofocus></label>
+        <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="btn primary" type="submit">Log in</button>
+      </form>
+      <p class="fine">Forgot your password? Ask the hospital's Tec Tha admin to reset it.</p>
+    </div>
+  </section>
+</div>
 {% endblock %}

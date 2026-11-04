@@ -204,3 +204,16 @@ def test_emergency_words_get_immediate_108_reply(client):
     assert res["action"] == "emergency"
     assert "108" in db.scalar("SELECT body FROM messages WHERE template='emergency_reply'")
     assert db.scalar("SELECT COUNT(*) FROM tasks WHERE title LIKE 'URGENT%'") == 1
+
+
+def test_reply_1_does_not_reconfirm_a_past_visit(client):
+    p = patients.find_or_create("Asha", "9812345672", consent=True)
+    doc = db.scalar("SELECT id FROM doctors LIMIT 1")
+    past = util.ts(util.now() - timedelta(days=1))
+    aid = db.execute("INSERT INTO appointments(patient_id, doctor_id, branch_id, starts_at, status, created_at)"
+                     " VALUES (?,?,?,?,'NoShow',?)", (p["id"], doc, "A", past, past))
+    db.execute("INSERT INTO messages(patient_id,to_phone,direction,template,body,status,related_type,related_id,created_at)"
+               " VALUES (?,?,'out','appt_reminder_24h','r','simulated','appointment',?,?)", (p["id"], p["phone"], aid, past))
+    res = _sim(client, "9812345672", "1")
+    assert res["action"] != "appointment_confirmed"
+    assert db.scalar("SELECT status FROM appointments WHERE id = ?", (aid,)) == "NoShow"

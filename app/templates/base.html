@@ -1,46 +1,124 @@
-<!doctype html>
+{% from "_macros.html" import icon %}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}Tec Tha Care Connect{% endblock %} · {{ hospital }}</title>
+<meta name="theme-color" content="#0e5c48" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1512" media="(prefers-color-scheme: dark)">
+<meta name="application-name" content="Tec Tha">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tec Tha">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="/static/style.css">
+<script>try{if(localStorage.getItem('tt-side')==='collapsed')document.documentElement.classList.add('side-collapsed')}catch(e){}</script>
+<script src="/static/app.js" defer></script>
 </head>
-<body>
-<header class="top">
-  <div class="wrap bar">
-    <a class="brand" href="/">
-      <span class="mark" aria-hidden="true">TT</span>
-      <span class="brand-text"><strong>{{ hospital }}</strong><small>Tec Tha Care Connect</small></span>
+<body class="{% if user %}has-shell{% else %}no-shell{% endif %}">
+<a class="skip" href="#main">Skip to content</a>
+{% if user %}
+<aside class="side" aria-label="Main navigation">
+  <div class="side-brand">
+    <a class="brand" href="{{ nav[0][0] if nav else '/' }}">
+      <img class="mark" src="/static/icons/icon-192.png" alt="" width="36" height="36">
+      <span class="brand-text"><strong>Tec Tha</strong><small>Care Connect</small></span>
     </a>
-    {% if user %}
-    <div class="who">
-      <span class="who-name">{{ user.full_name }} <span class="pill p-info">{{ user.role }}</span></span>
-      <form method="post" action="/logout">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="btn sm" type="submit">Log out</button>
-      </form>
-    </div>
-    {% endif %}
+    <button type="button" class="icon-btn side-toggle" data-side-toggle aria-label="Collapse menu" title="Collapse menu">{{ icon('sidebar') }}</button>
   </div>
-  {% if nav %}
-  <nav class="tabs" aria-label="Screens">
-    <div class="wrap tabs-row">
-      {% for href, label in nav %}
-      <a href="{{ href }}" {% if (href == '/' and path == '/') or (href != '/' and path.startswith(href)) %}aria-current="page"{% endif %}>{{ label }}</a>
+  <nav class="side-nav">
+    {% for g in nav_groups %}
+    <div class="side-group">
+      <span class="side-label">{{ g.name }}</span>
+      {% for it in g['items'] %}
+      <a href="{{ it.href }}" class="side-link" {% if it.active %}aria-current="page"{% endif %} title="{{ it.label }}">{{ icon(it.icon) }}<span>{{ it.label }}</span></a>
       {% endfor %}
     </div>
+    {% endfor %}
   </nav>
+  <div class="side-foot">
+    <span class="side-hosp" title="{{ hospital }}">{{ hospital }}</span>
+  </div>
+</aside>
+
+<header class="top">
+  <div class="top-left">
+    <a class="brand brand-compact" href="{{ nav[0][0] if nav else '/' }}" aria-label="Tec Tha home">
+      <img class="mark" src="/static/icons/icon-192.png" alt="" width="32" height="32">
+    </a>
+    <div class="top-hosp">
+      <strong>{{ hospital }}</strong>
+      <span class="muted">Tec Tha Care Connect</span>
+    </div>
+  </div>
+  {% if can_search %}
+  <form class="search" method="get" action="/patients" role="search">
+    <label for="g-search" class="sr-only">Search patients</label>
+    {{ icon('search') }}
+    <input id="g-search" name="q" type="search" placeholder="Search patients by name, mobile or TT- ID" autocomplete="off" value="{{ query.get('q', '') if path == '/patients' else '' }}">
+  </form>
   {% endif %}
+  <div class="top-right">
+    {% if branch_aware %}
+    <form method="get" action="{{ path }}" class="branch-switch">
+      {% for k, v in query.items() if k not in ('branch', 'msg', 'err') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <label for="top-branch" class="sr-only">Branch</label>
+      <select id="top-branch" name="branch" data-autosubmit>
+        <option value="">All branches</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if cur_branch == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+      </select>
+      <noscript><button class="btn sm" type="submit">Show</button></noscript>
+    </form>
+    {% endif %}
+    <details class="menu user-menu">
+      <summary class="avatar-btn" aria-label="Account menu for {{ user.full_name }}"><span class="avatar">{{ initials }}</span></summary>
+      <div class="menu-pop" role="menu">
+        <div class="menu-who"><strong>{{ user.full_name }}</strong><span class="muted small">{{ user.role|capitalize }}{% if user.branch_id %} · {% for b in branches if b.id == user.branch_id %}{{ b.name }}{% endfor %}{% else %} · All branches{% endif %}</span></div>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="menu-item" type="submit" role="menuitem">{{ icon('logout') }} Log out</button>
+        </form>
+      </div>
+    </details>
+  </div>
 </header>
-<main class="wrap page">
-  {% if msg %}<div class="flash ok" role="status">{{ msg }}</div>{% endif %}
-  {% if err %}<div class="flash bad" role="alert">{{ err }}</div>{% endif %}
+{% endif %}
+
+<main id="main" class="{% if user %}content{% else %}content bare{% endif %}" tabindex="-1">
   {% block content %}{% endblock %}
+  {% if user %}<footer class="foot">Tec Tha Care Connect · every message and change is recorded in the audit log.</footer>{% endif %}
 </main>
-<footer class="wrap foot">Tec Tha Care Connect · Every message and change is recorded in the audit log.</footer>
+
+{% if user %}
+<nav class="tabbar" aria-label="Main screens">
+  {% for it in tabs %}
+  <a href="{{ it.href }}" class="tab" {% if it.active %}aria-current="page"{% endif %}>{{ icon(it.icon) }}<span>{{ it.label }}</span></a>
+  {% endfor %}
+  {% if more %}
+  <button type="button" class="tab {% if more_active %}is-active{% endif %}" data-open="more-sheet" aria-haspopup="dialog">{{ icon('more') }}<span>More</span></button>
+  {% endif %}
+</nav>
+{% if more %}
+<dialog id="more-sheet" class="sheet" aria-label="More screens">
+  <div class="sheet-head"><strong>More</strong><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+  <div class="sheet-grid">
+    {% for it in more %}
+    <a href="{{ it.href }}" class="sheet-link" {% if it.active %}aria-current="page"{% endif %}>{{ icon(it.icon) }}<span>{{ it.label }}</span></a>
+    {% endfor %}
+  </div>
+</dialog>
+{% endif %}
+{% endif %}
+
+<div class="toasts" aria-live="polite">
+  {% if msg %}<div class="toast ok" role="status" data-autohide>{{ icon('check') }}<span>{{ msg }}</span><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss">{{ icon('close') }}</button></div>{% endif %}
+  {% if err %}<div class="toast bad" role="alert">{{ icon('alert') }}<span>{{ err }}</span><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss">{{ icon('close') }}</button></div>{% endif %}
+</div>
 </body>
 </html>

@@ -102,7 +102,10 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
                f"Thank you! Would you share your experience on Google? It helps other patients: {config.settings.review_link}", p["id"])
         return {"action": "feedback_high", "feedback_id": fid, "score": score}
 
-    if tmpl.startswith("appt_reminder_") and last["related_type"] == "appointment" and text in {"1", "2", "3"}:
+    upcoming = (last is not None and last["related_type"] == "appointment" and
+                db.scalar("SELECT 1 FROM appointments WHERE id = ? AND status IN ('Booked','Confirmed') AND starts_at > ?",
+                          (last["related_id"], util.ts(now))) is not None)
+    if tmpl.startswith("appt_reminder_") and upcoming and text in {"1", "2", "3"}:
         appt_id = last["related_id"]
         branch = db.scalar("SELECT branch_id FROM appointments WHERE id = ?", (appt_id,))
         if text == "1":

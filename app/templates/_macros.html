@@ -1,18 +1,67 @@
 {% macro csrf_field(csrf) %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
 
-{% macro branch_filter(branches, current, action, user, extra={}) %}
-{% if not user.branch_id %}
-<form method="get" action="{{ action }}" class="inline-filter">
-  {% for k, v in extra.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
-  <label for="bf-branch" class="label">Branch</label>
-  <select id="bf-branch" name="branch" onchange="this.form.submit()">
-    <option value="">All branches</option>
-    {% for b in branches %}<option value="{{ b.id }}" {% if current == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
-  </select>
-  <noscript><button class="btn sm" type="submit">Show</button></noscript>
-</form>
-{% endif %}
+{#- Hand-drawn 24px stroke icons. currentColor, decorative unless a label is given. -#}
+{% macro icon(name, label=None, cls="ic") -%}
+{%- set paths = {
+  'dashboard': '<rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/>',
+  'tasks': '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="m3.5 6.5 1.5 1.5 2.5-3M3.5 12l1.5 1.5 2.5-3M3.5 17.5 5 19l2.5-3"/>',
+  'inbox': '<path d="M3.5 13.5 6 5.5h12l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5Z"/><path d="M3.5 13.5H8l1.5 2.5h5l1.5-2.5h4.5"/>',
+  'calendar': '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17h2"/>',
+  'users': '<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.2a3.5 3.5 0 0 1 0 6.6M18 14.4a6.5 6.5 0 0 1 3.5 5.6"/>',
+  'chat': '<path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L3.5 20l1.4-4.9A8 8 0 1 1 20.5 11.5Z"/><path d="M8.5 10h7M8.5 13.5h4.5"/>',
+  'rupee': '<path d="M7 4.5h10M7 9h10M7 4.5h3.5a4.5 4.5 0 0 1 0 9H7l7.5 7"/>',
+  'shield': '<path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6Z"/><path d="M12 8.5v6M9 11.5h6"/>',
+  'upload': '<path d="M12 15.5V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>',
+  'settings': '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+  'audit': '<path d="M6 3.5h9l4 4v13H6Z"/><path d="M15 3.5v4h4M9 12h7M9 15.5h7M9 8.5h3"/>',
+  'search': '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
+  'more': '<circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/>',
+  'plus': '<path d="M12 5v14M5 12h14"/>',
+  'close': '<path d="m6 6 12 12M18 6 6 18"/>',
+  'chev-left': '<path d="m14.5 6-6 6 6 6"/>',
+  'chev-right': '<path d="m9.5 6 6 6-6 6"/>',
+  'arrow-right': '<path d="M4.5 12h15M14 6.5l5.5 5.5-5.5 5.5"/>',
+  'logout': '<path d="M14 4.5h4A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5h-4"/><path d="M10 16.5 5.5 12 10 7.5M5.5 12h10"/>',
+  'sidebar': '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/>',
+  'phone': '<path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16.5 16.5 0 0 1 4.5 5.5a2 2 0 0 1 2-2Z"/>',
+  'alert': '<path d="M12 3.5 2.5 20h19Z"/><path d="M12 10v4.5M12 17.2v.3"/>',
+  'clock': '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  'check': '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  'send': '<path d="M20.5 3.5 3.5 10.5l7 3 3 7Z"/><path d="m10.5 13.5 4-4"/>',
+  'filter': '<path d="M4 5.5h16l-6.5 7.5v5.5l-3 1.5v-7Z"/>',
+  'receipt': '<path d="M6 3.5h12v17l-2.5-1.5-2 1.5-1.5-1.5-1.5 1.5-2-1.5L6 20.5Z"/><path d="M9 8h6M9 11.5h6M9 15h3.5"/>',
+  'complaint': '<path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L3.5 20l1.4-4.9A8 8 0 1 1 20.5 11.5Z"/><path d="M12 8v4M12 15v.3"/>'
+} -%}
+<svg class="{{ cls }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true" focusable="false"{% endif %}>{{ paths.get(name, '')|safe }}</svg>
+{%- endmacro %}
+
+{#- URL for the current screen with one query value changed (keeps the others). -#}
+{% macro qs(path, query, key, value) -%}
+{%- set q = dict(query) -%}{%- set _ = q.pop('msg', None) -%}{%- set _ = q.pop('err', None) -%}
+{%- if value %}{% set _ = q.update({key: value}) %}{% else %}{% set _ = q.pop(key, None) %}{% endif -%}
+{{ path }}{% if q %}?{% for k, v in q.items() %}{{ k|urlencode }}={{ v|urlencode }}{% if not loop.last %}&amp;{% endif %}{% endfor %}{% endif %}
+{%- endmacro %}
+
+{% macro page_head(title, sub=None) %}
+<div class="page-head">
+  <div class="page-title">
+    <h1>{{ title }}</h1>
+    {% if sub %}<p class="muted">{{ sub }}</p>{% endif %}
+  </div>
+  <div class="page-actions">{{ caller() if caller else '' }}</div>
+</div>
 {% endmacro %}
+
+{% macro empty(icon_name, title, text) %}
+<div class="empty">
+  <span class="empty-ic">{{ icon(icon_name) }}</span>
+  <strong>{{ title }}</strong>
+  <p class="muted">{{ text }}</p>
+</div>
+{% endmacro %}
+
+{#- Kept for screens that are branch-filtered inside the page body (branch-bound users never see it). -#}
+{% macro branch_filter(branches, current, action, user, extra={}) %}{% endmacro %}
 
 {% macro status_pill(s) -%}
 {%- set cls = {
@@ -21,5 +70,13 @@
   'simulated':'p-warn','sent':'p-ok','failed':'p-bad','blocked_no_consent':'p-bad','received':'p-info',
   'Due':'p-warn','Reminded':'p-acc','Done':'p-ok','Open':'p-warn'
 }.get(s, 'p-info') -%}
-<span class="pill {{ cls }}">{{ {'NoShow':'No-show','blocked_no_consent':'Blocked: no consent'}.get(s, s) }}</span>
+<span class="pill {{ cls }}">{{ {'NoShow':'No-show','blocked_no_consent':'Blocked: no consent','simulated':'Simulated'}.get(s, s) }}</span>
+{%- endmacro %}
+
+{% macro delta(cur, prev, good_up=True, day='') -%}
+{%- if prev -%}
+{%- set pct = ((cur - prev) * 100 / prev)|round|int -%}
+{%- set up = cur >= prev -%}
+<span class="delta {{ 'good' if (up == good_up) else 'bad' }}" title="Compared with {{ day }}">{{ '▲' if up else '▼' }} {{ pct|abs }}% <span class="muted">vs {{ day }}</span></span>
+{%- else -%}<span class="delta muted">No data for {{ day }}</span>{%- endif -%}
 {%- endmacro %}

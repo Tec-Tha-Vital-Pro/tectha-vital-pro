@@ -1,30 +1,43 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field, branch_filter %}
+{% from "_macros.html" import csrf_field, icon %}
 {% block title %}Claims{% endblock %}
 {% block content %}
-<div class="head">
-  <div><h1>Insurance and TPA claims</h1><p class="muted">Red cards have waited longer than the insurer's time limit (1 hour for pre-auth, 3 hours for discharge).</p></div>
-  {{ branch_filter(branches, f_branch, '/claims', user) }}
+{% set stuck_n = namespace(n=0, amt=0) %}
+{% for c in cols %}{% for k in c.cards %}{% if k.stuck %}{% set stuck_n.n = stuck_n.n + 1 %}{% endif %}{% if c.key not in ('Settled', 'Denied') %}{% set stuck_n.amt = stuck_n.amt + k.amount %}{% endif %}{% endfor %}{% endfor %}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Insurance &amp; TPA claims</h1>
+    <p class="muted">IRDAI 2024: insurers decide cashless pre-auth within 1 hour and final discharge approval within 3 hours. Cards past those limits are marked.</p>
+  </div>
+  <div class="page-actions">
+    <span class="sum-chip"><span class="label">In progress</span> <strong class="num">{{ stuck_n.amt|inr }}</strong></span>
+    {% if stuck_n.n %}<span class="sum-chip bad"><span class="label">Past limit</span> <strong class="num">{{ stuck_n.n }}</strong></span>{% endif %}
+  </div>
 </div>
-<div class="board">
+
+{% set limits = {'PreAuthRequested': 'Limit 1 h', 'FinalSent': 'Limit 3 h'} %}
+<div class="board" role="list">
   {% for c in cols %}
-  <section class="col" aria-label="{{ c.label }}">
-    <h2 class="col-h"><span>{{ c.label }}</span><span class="num">{{ c.cards|length }}</span></h2>
+  <section class="col" aria-label="{{ c.label }}" role="listitem">
+    <h2 class="col-h"><span>{{ c.label }}</span><span class="count">{{ c.cards|length }}</span></h2>
+    {% if limits.get(c.key) %}<p class="col-limit">{{ icon('clock') }} {{ limits[c.key] }}</p>{% endif %}
     {% for k in c.cards %}
-    <article class="card {{ 'stuck' if k.stuck else '' }}">
-      <strong>{{ k.name }}</strong>
-      <span class="muted small">{{ k.uid }} · {{ k.branch_name }}</span>
-      <span>{{ k.insurer }} · <span class="num">{{ k.amount|inr }}</span></span>
-      <span class="small">{% if k.stuck %}<span class="pill p-bad">Waiting {{ k.waiting }}</span>{% else %}In stage {{ k.waiting }}{% endif %}</span>
+    <article class="card {{ 'stuck' if k.stuck }}">
+      <div class="card-top"><span class="insurer">{{ k.insurer }}</span><span class="branch-code" title="{{ k.branch_name }}">{{ k.branch_id }}</span></div>
+      <span class="amt">{{ k.amount|inr }}</span>
+      <span class="small"><strong>{{ k.name }}</strong> <span class="uid-sm">{{ k.uid }}</span></span>
+      <span class="small {{ 'bad-text' if k.stuck else 'muted' }}">{% if k.stuck %}{{ icon('alert', cls='ic xs') }} Waiting {{ k.waiting }}{% else %}In this stage {{ k.waiting }}{% endif %}</span>
       {% if c.key not in ('Settled', 'Denied') %}
       <form method="post" action="/claims/{{ k.id }}/stage" class="row-form">
         {{ csrf_field(csrf) }}
-        <select name="stage" aria-label="Move claim for {{ k.name }}">{% for s, lbl in stages if s != c.key %}<option value="{{ s }}">{{ lbl }}</option>{% endfor %}</select>
+        <label for="mv-{{ k.id }}" class="sr-only">Move claim for {{ k.name }}</label>
+        {% set keys = stages|map('first')|list %}{% set nxt = keys[keys.index(c.key) + 1] if keys.index(c.key) + 1 < keys|length else '' %}
+        <select id="mv-{{ k.id }}" name="stage">{% for s, lbl in stages if s != c.key %}<option value="{{ s }}" {% if s == nxt %}selected{% endif %}>{{ lbl }}</option>{% endfor %}</select>
         <button class="btn sm" type="submit">Move</button>
       </form>
       {% endif %}
     </article>
-    {% else %}<p class="muted small">None</p>{% endfor %}
+    {% else %}<p class="col-empty">No claims here</p>{% endfor %}
   </section>
   {% endfor %}
 </div>

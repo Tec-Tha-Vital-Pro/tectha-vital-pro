@@ -43,6 +43,9 @@ def seed(now: datetime | None = None) -> dict:
     db.execute("INSERT INTO branches(id, name) VALUES ('A','Branch A'), ('B','Branch B') "
                "ON CONFLICT(id) DO UPDATE SET name = excluded.name")
     db.set_setting("hospital_name", "Your Hospital")
+    # A fresh demo must be able to send today's owner report again.
+    db.execute("DELETE FROM settings WHERE key = 'last_owner_report_date'")
+    db.execute("DELETE FROM processed_webhooks")
 
     doctors = {"A": [], "B": []}
     for name, spec, br, fee in DOCTORS:

@@ -1,30 +1,36 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon, empty %}
 {% block title %}Patients{% endblock %}
 {% block content %}
-<div class="head">
-  <div><h1>Patients</h1><p class="muted">One record per mobile number, shared by all branches.</p></div>
-  <form method="get" action="/patients" class="inline-filter">
-    <input name="q" value="{{ q }}" placeholder="Name, mobile or TT- ID" aria-label="Search patients">
-    <button class="btn sm" type="submit">Search</button>
+<div class="page-head">
+  <div class="page-title">
+    <h1>Patients</h1>
+    <p class="muted">One record and one TT- ID per mobile number, shared by every branch.</p>
+  </div>
+  <form method="get" action="/patients" class="inline-filter page-search" role="search">
+    <label for="p-q" class="sr-only">Search patients</label>
+    <input id="p-q" name="q" type="search" value="{{ q }}" placeholder="Name, mobile or TT- ID" autocomplete="off">
+    <button class="btn" type="submit">{{ icon('search') }} Search</button>
   </form>
 </div>
-<section class="panel">
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>Patient ID</th><th>Name</th><th>Mobile</th><th>Age</th><th>Messages</th><th>Registered</th></tr></thead>
+<p class="muted small list-note">{% if q %}{{ rows|length }} result{{ 's' if rows|length != 1 }} for “{{ q }}”{% else %}Latest 50 registrations{% endif %}</p>
+<div class="tbl-wrap cards">
+  <table>
+    <thead><tr><th>Patient ID</th><th>Name</th><th>Mobile</th><th class="r">Age</th><th>WhatsApp consent</th><th>Registered</th></tr></thead>
     <tbody>
     {% for p in rows %}
     <tr>
-      <td class="num"><a href="/patients/{{ p.id }}">{{ p.uid }}</a></td>
-      <td><a href="/patients/{{ p.id }}"><strong>{{ p.name }}</strong></a></td>
-      <td class="num">{{ p.phone }}</td>
-      <td class="num">{{ p.age or '—' }}</td>
-      <td>{% if p.consent_messages %}<span class="pill p-ok">Consent given</span>{% else %}<span class="pill p-muted">No consent</span>{% endif %}</td>
-      <td class="num nowrap">{{ p.created_at[:10] }}</td>
+      <td data-label="Patient ID"><a class="uid" href="/patients/{{ p.id }}">{{ p.uid }}</a></td>
+      <td class="lead-cell"><a class="name-link" href="/patients/{{ p.id }}">{{ p.name }}</a>{% if p.gender %}<span class="sub">{{ p.gender }}</span>{% endif %}</td>
+      <td class="num" data-label="Mobile">+{{ p.phone[:2] }} {{ p.phone[2:7] }} {{ p.phone[7:] }}</td>
+      <td class="num r" data-label="Age">{{ p.age or '—' }}</td>
+      <td data-label="Consent">{% if p.consent_messages %}<span class="pill p-ok">Given</span>{% else %}<span class="pill p-muted">Not given</span>{% endif %}</td>
+      <td class="num nowrap muted" data-label="Registered">{{ p.created_at[8:10] }}/{{ p.created_at[5:7] }}/{{ p.created_at[:4] }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">{% if q %}No patient matches "{{ q }}".{% else %}No patients yet.{% endif %}</td></tr>
+    <tr class="empty-row"><td colspan="6" class="empty-cell">{% if q %}{{ empty('search', 'No patient matches "' ~ q ~ '"', 'Try the last 5 digits of the mobile number, or the TT- ID printed on the bill.') }}{% else %}{{ empty('users', 'No patients yet', 'Patients are created when an appointment is booked, an enquiry converts, or a CSV is imported.') }}{% endif %}</td></tr>
     {% endfor %}
     </tbody>
-  </table></div>
-</section>
+  </table>
+</div>
 {% endblock %}

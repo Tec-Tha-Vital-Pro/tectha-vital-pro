@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<section class="panel narrow">
+<section class="error-page">
   <span class="label">Error {{ code }}</span>
   <h1>{{ title }}</h1>
   <p class="muted">{{ detail }}</p>
-  <p><a class="btn" href="/">Go to start</a></p>
+  <p><a class="btn" href="{{ nav[0][0] if nav else '/' }}">{{ icon('chev-left') }} Back to start</a></p>
 </section>
 {% endblock %}

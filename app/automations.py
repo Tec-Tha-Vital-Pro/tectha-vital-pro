@@ -11,6 +11,7 @@ from app import audit, config, db, messaging, metrics, util, wa_templates
 from app.ai import insights
 
 DUES_STAGES = {1: 3, 2: 10, 3: 21}  # stage -> minimum bill age in days
+DUES_MIN_GAP = timedelta(days=5)
 
 
 def _hospital() -> str:
@@ -151,6 +152,10 @@ def dues_reminders(now: datetime) -> dict:
         age = (now - util.parse(b["created_at"])).days
         nxt = _last_stage(b["id"]) + 1
         if nxt not in DUES_STAGES or age < DUES_STAGES[nxt]:
+            continue
+        # Never send reminders back to back (e.g. an old bill imported late): wait between stages.
+        last_sent = db.scalar("SELECT MAX(sent_at) FROM dues_reminders WHERE bill_id = ?", (b["id"],))
+        if last_sent and now - util.parse(last_sent) < DUES_MIN_GAP:
             continue
         try:
             send_dues_reminder(b["id"], now)

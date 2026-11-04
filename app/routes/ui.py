@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.routing import APIRoute
 from fastapi.templating import Jinja2Templates
 
@@ -13,6 +13,22 @@ from app.auth import ADMIN, BILLING, CLINICAL, FRONT, STAFF
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 TEMPLATES.env.filters["inr"] = util.inr
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+def inr_short(v: int | float) -> str:
+    """Axis-friendly rupees: ₹950, ₹12k, ₹1.5L, ₹2.1Cr."""
+    v = float(v)
+    if v >= 1e7:
+        return f"₹{v / 1e7:.1f}".rstrip("0").rstrip(".") + "Cr"
+    if v >= 1e5:
+        return f"₹{v / 1e5:.1f}".rstrip("0").rstrip(".") + "L"
+    if v >= 1e3:
+        return f"₹{v / 1e3:.0f}k"
+    return f"₹{v:.0f}"
+
+
+TEMPLATES.env.filters["inr_short"] = inr_short
 
 LEAD_SOURCES = ["WhatsApp", "Phone call", "Website form", "Google", "Facebook ad", "Instagram ad", "Practo", "Walk-in", "Referral"]
 LEAD_STATUSES = ["New", "Contacted", "Booked", "Converted", "Lost"]
@@ -23,19 +39,28 @@ TASK_KINDS = {"missed_call": "Missed calls", "complaint": "Complaints", "claim_s
               "unbilled": "Unbilled services", "followup_call": "Follow-up calls"}
 PAY_MODES = ["UPI", "Card", "Cash", "Insurance"]
 
+# (href, label, roles, group, icon)
 NAV = [
-    ("/", "Dashboard", ADMIN),
-    ("/leads", "Enquiries", FRONT),
-    ("/appointments", "Appointments", CLINICAL),
-    ("/patients", "Patients", CLINICAL),
-    ("/billing", "Billing", BILLING),
-    ("/claims", "Claims", BILLING),
-    ("/tasks", "Tasks", STAFF - {"doctor"}),
-    ("/messages", "Messages", FRONT),
-    ("/import", "Import", ADMIN),
-    ("/settings", "Settings", ADMIN),
-    ("/audit", "Audit log", ADMIN),
+    ("/", "Dashboard", ADMIN, "Overview", "dashboard"),
+    ("/tasks", "Tasks", STAFF - {"doctor"}, "Overview", "tasks"),
+    ("/leads", "Enquiries", FRONT, "Patients & front desk", "inbox"),
+    ("/appointments", "Appointments", CLINICAL, "Patients & front desk", "calendar"),
+    ("/patients", "Patients", CLINICAL, "Patients & front desk", "users"),
+    ("/messages", "Messages", FRONT, "Patients & front desk", "chat"),
+    ("/billing", "Billing", BILLING, "Money", "rupee"),
+    ("/claims", "Claims", BILLING, "Money", "shield"),
+    ("/import", "Import", ADMIN, "Admin", "upload"),
+    ("/settings", "Settings", ADMIN, "Admin", "settings"),
+    ("/audit", "Audit log", ADMIN, "Admin", "audit"),
 ]
+# Bottom tab bar on phones: the most used screens per role (the rest go under "More").
+TABS = {
+    "admin": ["/", "/leads", "/billing", "/messages"],
+    "frontdesk": ["/leads", "/appointments", "/messages", "/tasks"],
+    "billing": ["/billing", "/claims", "/tasks"],
+    "doctor": ["/appointments", "/patients"],
+}
+BRANCH_AWARE = {"/", "/leads", "/appointments", "/billing", "/claims", "/tasks"}
 HOME = {"admin": "/", "frontdesk": "/leads", "billing": "/billing", "doctor": "/appointments"}
 
 
@@ -73,12 +98,33 @@ def _hospital() -> str:
     return db.get_setting("hospital_name", "Your Hospital")
 
 
+def _active(href: str, path: str) -> bool:
+    return path == "/" if href == "/" else path.startswith(href)
+
+
 def render(request: Request, name: str, user: dict | None, status_code: int = 200, **ctx) -> HTMLResponse:
-    nav = [(href, label) for href, label, roles in NAV if user and user["role"] in roles]
+    path = request.url.path
+    items = [{"href": h, "label": lbl, "group": g, "icon": ic, "active": _active(h, path)}
+             for h, lbl, roles, g, ic in NAV if user and user["role"] in roles]
+    groups: list[dict] = []
+    for it in items:
+        if not groups or groups[-1]["name"] != it["group"]:
+            groups.append({"name": it["group"], "items": []})
+        groups[-1]["items"].append(it)
+    tab_hrefs = TABS.get(user["role"], []) if user else []
+    tabs = [it for h in tab_hrefs for it in items if it["href"] == h]
+    more = [it for it in items if it["href"] not in tab_hrefs]
+    initials = "".join(w[0] for w in (user["full_name"].split()[:2] if user else [])).upper() or "?"
     base = {
-        "user": user, "nav": nav, "path": request.url.path, "hospital": _hospital(),
+        "user": user, "nav": [(it["href"], it["label"]) for it in items], "nav_groups": groups,
+        "tabs": tabs, "more": more, "more_active": any(it["active"] for it in more),
+        "path": path, "hospital": _hospital(), "initials": initials,
         "branches": _branches(), "msg": request.query_params.get("msg"), "err": request.query_params.get("err"),
         "csrf": user["csrf"] if user else "",
+        "branch_aware": bool(user and not user["branch_id"] and path in BRANCH_AWARE),
+        "cur_branch": request.query_params.get("branch", ""),
+        "can_search": bool(user and user["role"] in CLINICAL),
+        "query": dict(request.query_params),
     }
     base.update(ctx)
     return TEMPLATES.TemplateResponse(request, name, base, status_code=status_code)
@@ -140,7 +186,7 @@ async def logout(request: Request):
 # ---------------------------------------------------------------- dashboard
 
 def _chart(rows: list[dict], branches: list[dict]) -> dict:
-    W, H, pl, pr, pt, pb = 640, 260, 64, 10, 14, 30
+    W, H, pl, pr, pt, pb = 640, 260, 52, 10, 14, 30
     iw, ih = W - pl - pr, H - pt - pb
     peak = max([r[b["id"]] for r in rows for b in branches] + [0])
     step = _nice_step(peak / 4 if peak else 1000)
@@ -149,7 +195,7 @@ def _chart(rows: list[dict], branches: list[dict]) -> dict:
     v = 0
     while v <= top:
         y = pt + ih - (v / top) * ih
-        grid.append({"y": round(y, 1), "label": util.inr(v)})
+        grid.append({"y": round(y, 1), "label": inr_short(v)})
         v += step
     colors = ["var(--s1)", "var(--s2)", "var(--s3)"]
     n = max(1, len(branches))
@@ -187,12 +233,14 @@ def dashboard(request: Request, branch: str | None = None):
     today = util.now().date()
     yday = today - timedelta(days=1)
     k_today, k_yday = metrics.kpis(today, br), metrics.kpis(yday, br)
+    k_prev = metrics.kpis(yday - timedelta(days=1), br)
     shown = [b for b in _branches() if not br or b["id"] == br]
     chart = _chart(metrics.collections_by_day(today, 7), shown)
     fun = metrics.funnel(today.replace(day=1), today, br)
     steps = [("Enquiries", fun["enquiries"]), ("Booked", fun["booked"]), ("Visited", fun["visited"]), ("Paid", fun["paid"])]
     report = db.one("SELECT body, created_at, status FROM messages WHERE template='owner_daily_report' ORDER BY id DESC LIMIT 1")
     return render(request, "dashboard.html", user, branch=br, today=today, yday=yday, k_today=k_today, k_yday=k_yday,
+                  k_prev=k_prev, prev_day=yday - timedelta(days=1),
                   chart=chart, steps=steps, fun=fun, speed=metrics.reply_speed(today, br),
                   attention=metrics.attention(br), report=report)
 
@@ -484,16 +532,36 @@ async def task_done(request: Request, task_id: int):
 # ---------------------------------------------------------------- messages
 
 @router.get("/messages", response_class=HTMLResponse)
-def messages_page(request: Request, phone: str = ""):
+def messages_page(request: Request, phone: str = "", q: str = ""):
     user = auth.require(request, FRONT)
-    digits = "".join(c for c in phone if c.isdigit())
-    sql = "SELECT m.*, p.name, p.uid FROM messages m LEFT JOIN patients p ON p.id=m.patient_id"
-    params: tuple = ()
+    rows = db.query("SELECT m.*, p.name, p.uid, p.id AS pid FROM messages m LEFT JOIN patients p ON p.id=m.patient_id"
+                    " ORDER BY m.id DESC LIMIT 500")
+    owner = config.settings.owner_phone
+    convs: dict[str, dict] = {}
+    for m in rows:
+        c = convs.get(m["to_phone"])
+        if c is None:
+            title = "Owner's daily report" if m["to_phone"] == owner and not m["name"] else (m["name"] or "+" + m["to_phone"])
+            c = convs[m["to_phone"]] = {"phone": m["to_phone"], "title": title, "uid": m["uid"], "pid": m["pid"],
+                                        "last": m, "count": 0, "unread_in": m["direction"] == "in"}
+        c["count"] += 1
+        if not c["uid"] and m["uid"]:
+            c["uid"], c["pid"] = m["uid"], m["pid"]
+    conv_list = list(convs.values())
+    qd = "".join(ch for ch in q if ch.isdigit())
+    if q.strip():
+        ql = q.strip().lower()
+        conv_list = [c for c in conv_list if ql in c["title"].lower() or (qd and qd in c["phone"])]
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    selected = None
     if digits:
-        sql += " WHERE m.to_phone LIKE ?"
-        params = (f"%{digits}%",)
-    rows = db.query(sql + " ORDER BY m.id DESC LIMIT 200", params)
-    return render(request, "messages.html", user, rows=rows, phone=phone,
+        selected = next((c for c in convs.values() if c["phone"].endswith(digits) or digits in c["phone"]), None)
+    if selected is None and conv_list and not digits:
+        selected = conv_list[0]
+    thread = []
+    if selected:
+        thread = db.query("SELECT * FROM messages WHERE to_phone = ? ORDER BY id DESC LIMIT 200", (selected["phone"],))[::-1]
+    return render(request, "messages.html", user, convs=conv_list, selected=selected, thread=thread, phone=phone, q=q,
                   simulator=config.settings.whatsapp_mode == "simulator")
 
 
@@ -580,3 +648,17 @@ def audit_page(request: Request):
     user = auth.require(request, ADMIN)
     rows = db.query("SELECT * FROM audit_log ORDER BY id DESC LIMIT 200")
     return render(request, "audit.html", user, rows=rows)
+
+
+# ---------------------------------------------------------------- installable app (PWA)
+
+@router.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@router.get("/sw.js", include_in_schema=False)
+def service_worker():
+    # Served from the root so it can control every page; it only ever caches /static files.
+    return FileResponse(STATIC_DIR / "sw.js", media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})

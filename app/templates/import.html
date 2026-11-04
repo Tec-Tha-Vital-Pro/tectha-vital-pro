@@ -1,39 +1,39 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf_field %}
+{% from "_macros.html" import csrf_field, icon %}
 {% block title %}Import{% endblock %}
 {% block content %}
-<div class="head"><div><h1>Import from the billing software</h1><p class="muted">Export patients or bills from the hospital's software as CSV and upload here. Existing patients are matched by mobile number.</p></div></div>
-<div class="grid-2">
-  <section class="panel">
-    <h2>Upload a CSV file</h2>
-    {% if import_error %}<div class="flash bad" role="alert">{{ import_error }}</div>{% endif %}
+<div class="page-head"><div class="page-title"><h1>Import from the billing software</h1><p class="muted">Export patients or bills as CSV and upload them here. Patients are matched on mobile number; bills already imported are skipped.</p></div></div>
+<div class="grid-3-2">
+  <section class="sec" aria-labelledby="im-up">
+    <div class="sec-head"><h2 id="im-up">Upload a CSV file</h2></div>
+    {% if import_error %}<div class="inline-err" role="alert">{{ icon('alert') }} {{ import_error }}</div>{% endif %}
     <form method="post" action="/import" enctype="multipart/form-data" class="stack">
       {{ csrf_field(csrf) }}
       <fieldset class="radios"><legend class="label">The file contains</legend>
-        <label class="check"><input type="radio" name="kind" value="patients" checked> Patients</label>
-        <label class="check"><input type="radio" name="kind" value="bills"> Bills</label>
+        <label class="check"><input type="radio" name="kind" value="patients" checked> Patients <span class="hint">name, phone, age, gender, consent</span></label>
+        <label class="check"><input type="radio" name="kind" value="bills"> Bills <span class="hint">bill_no, phone, branch_id, item, amount, paid, date</span></label>
       </fieldset>
-      <label for="i-file">CSV file<input id="i-file" type="file" name="file" accept=".csv,text/csv" required></label>
-      <button class="btn primary" type="submit">Import</button>
+      <label for="i-file" class="dropzone">{{ icon('upload') }}<span><strong>Choose a CSV file</strong><span class="hint">Excel: Save as → CSV UTF-8</span></span><input id="i-file" type="file" name="file" accept=".csv,text/csv" required></label>
+      <div><button class="btn primary" type="submit">Import</button></div>
     </form>
   </section>
-  <section class="panel">
-    <h2>Result</h2>
+  <section class="sec" aria-labelledby="im-res">
+    <div class="sec-head"><h2 id="im-res">Result</h2></div>
     {% if result %}
-      <p><strong>{{ filename }}</strong> · {{ kind }}</p>
-      <div class="kpis tight">
-        <div class="kpi"><span class="label">Created</span><span class="v num">{{ result.created }}</span></div>
-        <div class="kpi"><span class="label">Updated</span><span class="v num">{{ result.updated }}</span></div>
-        <div class="kpi"><span class="label">Skipped</span><span class="v num">{{ result.skipped }}</span></div>
+      <p class="small"><strong>{{ filename }}</strong> · {{ kind }}</p>
+      <div class="kpi-strip three">
+        <div class="kpi-cell"><span class="label">Created</span><span class="v num">{{ result.created }}</span></div>
+        <div class="kpi-cell"><span class="label">Updated</span><span class="v num">{{ result.updated }}</span></div>
+        <div class="kpi-cell"><span class="label">Skipped</span><span class="v num">{{ result.skipped }}</span></div>
       </div>
       {% if result.errors %}
-      <h3>Rows that need fixing</h3>
+      <h3 class="sub-h">Rows that need fixing</h3>
       <div class="tbl-wrap"><table><thead><tr><th class="r">Row</th><th>Problem</th></tr></thead><tbody>
       {% for e in result.errors %}<tr><td class="r num">{{ e.row }}</td><td>{{ e.error }}</td></tr>{% endfor %}
       </tbody></table></div>
-      {% else %}<p class="muted">No errors.</p>{% endif %}
+      {% else %}<p class="ok-text small">{{ icon('check', cls='ic xs') }} Every row imported cleanly.</p>{% endif %}
     {% else %}
-      <p class="muted">Upload a file to see what was imported.</p>
+      <p class="muted small">Upload a file to see what was created, updated or skipped, and any rows that need fixing. Sample files are in <code>docs/samples/</code>.</p>
     {% endif %}
   </section>
 </div>

@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Audit log{% endblock %}
 {% block content %}
-<div class="head"><div><h1>Audit log</h1><p class="muted">The last 200 actions by staff and automations.</p></div></div>
-<section class="panel">
-  <div class="tbl-wrap"><table>
+<div class="page-head"><div class="page-title"><h1>Audit log</h1><p class="muted">The last 200 actions by staff and automations. Kept for DPDP and NABH review.</p></div></div>
+<div class="tbl-wrap">
+  <table class="dense">
     <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Record</th><th>Detail</th></tr></thead>
     <tbody>
     {% for a in rows %}
-    <tr><td class="num nowrap">{{ a.created_at }}</td><td>{{ a.actor }}</td><td>{{ a.action }}</td><td>{{ a.entity }}{% if a.entity_id %} #{{ a.entity_id }}{% endif %}</td><td class="small mono">{{ a.detail or '' }}</td></tr>
+    <tr><td class="num nowrap muted">{{ a.created_at[8:10] }}/{{ a.created_at[5:7] }} {{ a.created_at[11:19] }}</td><td class="nowrap">{{ a.actor }}</td><td class="nowrap"><span class="act">{{ a.action|replace('_', ' ') }}</span></td><td class="nowrap">{{ a.entity }}{% if a.entity_id %} <span class="muted">#{{ a.entity_id }}</span>{% endif %}</td><td class="mono">{{ a.detail or '' }}</td></tr>
     {% else %}<tr><td colspan="5" class="muted">Nothing recorded yet.</td></tr>{% endfor %}
     </tbody>
-  </table></div>
-</section>
+  </table>
+</div>
 {% endblock %}
