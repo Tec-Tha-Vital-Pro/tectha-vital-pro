@@ -281,7 +281,7 @@ async function bodyText(page) {
       return 'patient had no consent: blocked and explained (correct)';
     }
     expect(/reminder sent/i.test(f.msg), `no success message (err=${f.err})`);
-    expect(/https?:\/\/\S+/.test(m.body) && /Balance due\s+₹/.test(m.body), 'reminder text has no payment link or balance');
+    expect(/https?:\/\/\S+/.test(m.body) && /balance due (of )?₹/i.test(m.body), 'reminder text has no payment link or balance');
   });
 
   await step(page, '14 billing: Record payment updates the balance exactly', async () => {
