@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon, empty, phone_attrs %}
+{% block title %}Diagnostics & Pharmacy{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Diagnostics &amp; Pharmacy</h1>
+    <p class="muted">Laboratory, radiology and pharmacy counter{% if branch %} · {% for b in branches if b.id == branch %}{{ b.name }}{% endfor %}{% endif %}</p>
+  </div>
+  <div class="page-actions">
+    {% if tab == 'lab' and can_lab %}<button type="button" class="btn primary" data-open="dlg-lab">{{ icon('plus') }} Order a test</button>{% endif %}
+    {% if tab == 'rad' and can_rad %}<button type="button" class="btn primary" data-open="dlg-rad">{{ icon('plus') }} Schedule a scan</button>{% endif %}
+  </div>
+</div>
+
+<nav class="subtabs" aria-label="Diagnostics sections">
+  {% for key, label, ic in tabs %}
+  <a href="/diagnostics?tab={{ key }}{% if branch and not user.branch_id %}&amp;branch={{ branch }}{% endif %}" class="subtab" {% if tab == key %}aria-current="page"{% endif %}>{{ icon(ic) }}<span>{{ label }}</span></a>
+  {% endfor %}
+</nav>
+
+{% if tab == 'lab' %}
+<div class="kpis lab-kpis">
+  <div class="kpi"><span class="label">Collected</span><span class="v">{{ kpis.collected }}</span><span class="d">Sample taken, on the way to the lab</span></div>
+  <div class="kpi"><span class="label">Received</span><span class="v">{{ kpis.received }}</span><span class="d">In the lab, result pending</span></div>
+  <div class="kpi"><span class="label">Resulted</span><span class="v">{{ kpis.resulted }}</span><span class="d">Awaiting pathologist</span></div>
+  <div class="kpi {{ 'kpi-bad' if kpis.critical }}"><span class="label">Critical values</span><span class="v">{{ kpis.critical }}</span><span class="d {{ 'bad-text' if kpis.critical }}">{{ 'Call-out needed' if kpis.critical else 'None open' }}</span></div>
+</div>
+
+<section class="panel flush">
+  <div class="panel-head"><div><h2>Lab worklist</h2><p class="muted small">Barcode-tracked from collection to validation</p></div></div>
+  <div class="tbl-wrap">
+    <table class="worklist">
+      <thead><tr><th>Patient</th><th>Test</th><th>Status</th><th>Result</th><th>Reference</th><th>Ordered</th><th class="r"><span class="sr-only">Action</span></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr id="lab-{{ r.id }}" class="{{ 'row-critical' if r.callout_status == 'Open' }}">
+        <td><strong>{{ r.patient_name }}</strong><span class="sub mono">{{ r.uid }}{% if r.sample_id %} · {{ r.sample_id }}{% endif %}</span></td>
+        <td>{{ r.test_name }}
+          {% if r.reflex_child %}<span class="sys-note">{{ r.reflex_child.test_name }} added automatically (reflex rule)</span>{% endif %}
+          {% if r.reflex_name %}<span class="sys-note">Reflex test after {{ r.reflex_name }}</span>{% endif %}
+          {% if r.delta_flag %}<span class="sys-note">Delta check: big change from the last result</span>{% endif %}</td>
+        <td>{% set sp = {'Ordered':'p-muted','Collected':'p-muted','Received':'p-muted','Resulted':'p-info','Validated':'p-ok'} %}<span class="pill {{ sp[r.status] }}">{{ r.status }}</span>{% if r.auto_validated %}<span class="sub">auto-verified</span>{% endif %}</td>
+        <td class="num result {{ 'res-crit' if r.flag in ('HH','LL') else ('res-abn' if r.flag in ('H','L') else '') }}">
+          {% if r.result_value is not none %}{{ r.value_text }} {{ r.unit }} {% if r.mark %}<span aria-label="{{ 'critical' if r.flag in ('HH','LL') else ('high' if r.flag == 'H' else 'low') }}">{{ r.mark }}</span>{% endif %}{% else %}—{% endif %}</td>
+        <td class="num muted">{{ r.ref_text }}</td>
+        <td class="num muted nowrap">{{ r.ago }}</td>
+        <td class="r actions">
+          {% if r.callout_status == 'Open' and can_lab %}
+            <button type="button" class="btn sm danger-solid" data-open="dlg-call-{{ r.id }}">{{ icon('phone') }} Call out</button>
+            <dialog id="dlg-call-{{ r.id }}" class="slide" aria-labelledby="call-h-{{ r.id }}">
+              <form method="post" action="/diagnostics/lab/{{ r.id }}/callout" class="dlg-body">{{ csrf_field(csrf) }}
+                <div class="dlg-head"><h2 id="call-h-{{ r.id }}">Critical value call-out</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+                <p class="crit-box"><strong>{{ r.test_name }}: {{ r.value_text }} {{ r.unit }} !!</strong><br>{{ r.patient_name }} · ordered by {{ r.doctor_name or 'the duty doctor' }}</p>
+                <label for="ct-{{ r.id }}">Who received the call (name and role)</label>
+                <input id="ct-{{ r.id }}" name="called_to" required maxlength="120" placeholder="Dr. Menon, ward 3 duty doctor">
+                <label class="check"><input type="checkbox" name="read_back" value="1" required> They read the value back to me correctly</label>
+                <div class="dlg-actions"><button class="btn primary" type="submit">Record call-out</button></div>
+              </form>
+            </dialog>
+          {% elif r.callout_status == 'CalledOut' %}
+            <span class="pill p-ok" title="Called out to {{ r.called_to }} at {{ r.called_at[11:16] }} by {{ r.called_by }}">Called out</span>
+          {% endif %}
+          {% if r.status in ('Ordered','Collected') and can_lab %}
+            <form method="post" action="/diagnostics/lab/{{ r.id }}/advance">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ 'Collect' if r.status == 'Ordered' else 'Receive' }} {{ icon('chev-right') }}</button></form>
+          {% elif r.status == 'Received' and can_lab %}
+            <form method="post" action="/diagnostics/lab/{{ r.id }}/result" class="result-form">{{ csrf_field(csrf) }}
+              <label for="rv-{{ r.id }}" class="sr-only">Result for {{ r.test_name }} ({{ r.unit }})</label>
+              <input id="rv-{{ r.id }}" name="value" inputmode="decimal" required placeholder="{{ r.unit or 'value' }}" class="num">
+              <button class="btn sm" type="submit">Advance {{ icon('chev-right') }}</button>
+            </form>
+          {% elif r.status == 'Resulted' and can_validate and r.callout_status != 'Open' %}
+            <form method="post" action="/diagnostics/lab/{{ r.id }}/validate">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">Validate {{ icon('chev-right') }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty-cell">{{ empty('lab', 'No lab tests yet', 'Order a test from a patient visit, or use "Order a test". It shows here from collection to validation.') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="tbl-foot">{{ icon('alert', cls='ic xs') }} Normal results that pass delta checks and QC are auto-verified; abnormal ones wait for a pathologist. Critical values must be called out to a doctor with read-back. Reflex rules add follow-on tests automatically.</p>
+</section>
+
+{% if can_lab %}
+<dialog id="dlg-lab" class="slide" aria-labelledby="lab-h">
+  <form method="post" action="/diagnostics/lab/order" class="dlg-body">{{ csrf_field(csrf) }}
+    <div class="dlg-head"><h2 id="lab-h">Order a test</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+    <label for="lo-name">Patient name</label><input id="lo-name" name="name" required maxlength="80" autocomplete="off">
+    <label for="lo-phone">Mobile number</label><input id="lo-phone" name="phone" required {{ phone_attrs() }}>
+    <label for="lo-test">Test</label>
+    <select id="lo-test" name="test_code" required>{% for t in tests %}<option value="{{ t.code }}">{{ t.name }} · {{ t.price|inr }}</option>{% endfor %}</select>
+    {% if not user.branch_id %}<label for="lo-br">Branch</label><select id="lo-br" name="branch_id">{% for b in branches %}<option value="{{ b.id }}" {% if b.id == branch %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select>{% endif %}
+    <p class="hint">The test is added as a service to be billed, so it can't be missed on the bill.</p>
+    <div class="dlg-actions"><button class="btn primary" type="submit">Order test</button></div>
+  </form>
+</dialog>
+{% endif %}
+
+{% elif tab == 'rad' %}
+<div class="kpis lab-kpis">
+  {% for s in ['Scheduled','Performed','Reported'] %}<div class="kpi"><span class="label">{{ s }}</span><span class="v">{{ counts[s] }}</span></div>{% endfor %}
+</div>
+<section class="panel flush">
+  <div class="panel-head"><div><h2>Radiology schedule</h2><p class="muted small">X-ray, ultrasound, CT and MRI from booking to report</p></div></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Patient</th><th>Study</th><th>Slot</th><th>Status</th><th class="r"><span class="sr-only">Action</span></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr id="rad-{{ r.id }}">
+        <td><strong>{{ r.patient_name }}</strong><span class="sub mono">{{ r.uid }}</span></td>
+        <td>{{ r.modality }} · {{ r.study }}
+          {% if r.is_obstetric %}<span class="sys-note">PCPNDT: Form F {{ 'recorded' if r.form_f_recorded else 'required before the scan' }}</span>{% endif %}
+          {% if r.report_text %}<span class="sub">{{ r.report_text[:90] }}{% if r.report_text|length > 90 %}…{% endif %}</span>{% endif %}</td>
+        <td class="num nowrap">{{ r.slot_at[8:10] }}/{{ r.slot_at[5:7] }} {{ r.slot_at[11:16] }}</td>
+        <td><span class="pill {{ {'Scheduled':'p-muted','Performed':'p-info','Reported':'p-ok'}[r.status] }}">{{ r.status }}</span></td>
+        <td class="r actions">
+          {% if can_rad and r.status == 'Scheduled' %}
+          <form method="post" action="/diagnostics/rad/{{ r.id }}/advance" class="inline-form">{{ csrf_field(csrf) }}
+            {% if r.is_obstetric and not r.form_f_recorded %}<label class="check small"><input type="checkbox" name="form_f" value="1" required> Form F completed</label>{% endif %}
+            <button class="btn sm" type="submit">Performed {{ icon('chev-right') }}</button>
+          </form>
+          {% elif can_rad and r.status == 'Performed' %}
+          <button type="button" class="btn sm" data-open="dlg-rep-{{ r.id }}">Write report {{ icon('chev-right') }}</button>
+          <dialog id="dlg-rep-{{ r.id }}" class="slide" aria-labelledby="rep-h-{{ r.id }}">
+            <form method="post" action="/diagnostics/rad/{{ r.id }}/advance" class="dlg-body">{{ csrf_field(csrf) }}
+              <div class="dlg-head"><h2 id="rep-h-{{ r.id }}">Report: {{ r.modality }} {{ r.study }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+              <label for="rt-{{ r.id }}">Findings and impression</label>
+              <textarea id="rt-{{ r.id }}" name="report_text" rows="8" required maxlength="4000"></textarea>
+              <div class="dlg-actions"><button class="btn primary" type="submit">Save report</button></div>
+            </form>
+          </dialog>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty-cell">{{ empty('scan', 'No scans scheduled', 'Use "Schedule a scan" to book an X-ray, ultrasound, CT or MRI.') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="tbl-foot">{{ icon('alert', cls='ic xs') }} Obstetric ultrasound needs PCPNDT Form F before it is performed. This system has no field for the sex of a foetus.</p>
+</section>
+{% if can_rad %}
+<dialog id="dlg-rad" class="slide" aria-labelledby="rad-h">
+  <form method="post" action="/diagnostics/rad/order" class="dlg-body">{{ csrf_field(csrf) }}
+    <div class="dlg-head"><h2 id="rad-h">Schedule a scan</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('close') }}</button></div>
+    <label for="ro-name">Patient name</label><input id="ro-name" name="name" required maxlength="80" autocomplete="off">
+    <label for="ro-phone">Mobile number</label><input id="ro-phone" name="phone" required {{ phone_attrs() }}>
+    <label for="ro-mod">Type</label><select id="ro-mod" name="modality">{% for m in ['X-ray','USG','CT','MRI'] %}<option>{{ m }}</option>{% endfor %}</select>
+    <label for="ro-study">Study</label><input id="ro-study" name="study" required maxlength="120" placeholder="Chest PA view">
+    <label for="ro-slot">Date and time</label><input id="ro-slot" name="slot_at" type="datetime-local" required>
+    <label class="check"><input type="checkbox" name="obstetric" value="1"> Obstetric ultrasound (PCPNDT Form F applies)</label>
+    {% if not user.branch_id %}<label for="ro-br">Branch</label><select id="ro-br" name="branch_id">{% for b in branches %}<option value="{{ b.id }}" {% if b.id == branch %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select>{% endif %}
+    <div class="dlg-actions"><button class="btn primary" type="submit">Schedule</button></div>
+  </form>
+</dialog>
+{% endif %}
+
+{% else %}
+<div class="grid-side">
+  <section class="panel flush">
+    <div class="panel-head"><div><h2>Prescriptions queue</h2><p class="muted small">Dispensed first-expiry-first-out, then billed</p></div></div>
+    <ul class="rx-list">
+      {% for x in rxs %}
+      <li id="rx-{{ x.id }}">
+        <div class="rx-main">
+          <strong>{{ x.patient_name }}</strong> <span class="mono muted">{{ x.uid }}</span>
+          <span class="sub">{{ x.doctor_name or 'Doctor' }} · {{ x.created_at[11:16] }}</span>
+          <ul class="rx-items">
+            {% for i in x['items'] %}<li><span>{{ i.name }} × {{ i.qty }}</span>{% if i.schedule %}<span class="pill p-warn plain">Sch {{ i.schedule }}</span>{% endif %}{% if i.batch_no %}<span class="mono muted small">batch {{ i.batch_no }} · exp {{ i.expiry[5:7] }}/{{ i.expiry[2:4] }}</span>{% endif %}</li>{% endfor %}
+          </ul>
+        </div>
+        <div class="rx-side">
+          <span class="pill {{ {'Pending':'p-muted','Dispensed':'p-info','Billed':'p-ok'}[x.status] }}">{{ x.status }}</span>
+          {% if x.total %}<span class="num">{{ x.total|inr }}</span>{% endif %}
+          {% if can_rx and x.status != 'Billed' %}
+          <form method="post" action="/diagnostics/rx/{{ x.id }}/advance">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ 'Dispense' if x.status == 'Pending' else 'Create bill' }} {{ icon('chev-right') }}</button></form>
+          {% endif %}
+        </div>
+      </li>
+      {% else %}
+      <li>{{ empty('pill', 'No prescriptions waiting', 'New prescriptions from doctors appear here to dispense.') }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  <div class="stack">
+    <section class="panel">
+      <h2>Near expiry (90 days)</h2>
+      <ul class="plain-list">
+        {% for b in near_expiry %}<li><span>{{ b.name }}</span><span class="mono small muted">{{ b.batch_no }} · {{ b.qty }} left · exp {{ b.expiry[8:10] }}/{{ b.expiry[5:7] }}</span></li>
+        {% else %}<li class="muted">Nothing expires in the next 90 days.</li>{% endfor %}
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Schedule H / H1 / X register</h2>
+      <ul class="plain-list">
+        {% for g in register %}<li><span>{{ g.drug_name }} × {{ g.qty }} <span class="pill p-warn plain">{{ g.schedule }}</span></span><span class="small muted">{{ g.patient_name }} · {{ g.prescriber or '—' }} · {{ g.created_at[8:10] }}/{{ g.created_at[5:7] }} {{ g.created_at[11:16] }}</span></li>
+        {% else %}<li class="muted">No scheduled drugs dispensed yet.</li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

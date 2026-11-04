@@ -6,8 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 {% block meta %}{% endblock %}
 <title>{% block title %}{{ product }}{% endblock %} · {{ hospital }}</title>
-<meta name="theme-color" content="#0e5c48" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0b1512" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#121214">
 <meta name="application-name" content="{{ product }}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -18,12 +17,12 @@
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/side-init.js"></script>
 <script src="/static/app.js" defer></script>
 </head>
-<body class="{% if user %}has-shell{% else %}no-shell{% endif %}">
+<body class="{% if user %}has-shell{% else %}no-shell{% endif %} {% block body_class %}{% endblock %}">
 <a class="skip" href="#main">Skip to content</a>
 {% if user %}
 <aside class="side" aria-label="Main navigation">
@@ -45,7 +44,11 @@
     {% endfor %}
   </nav>
   <div class="side-foot">
+    {% if demo_build() %}
+    <div class="demo-card"><strong title="{{ hospital }}">{{ hospital }}</strong><span>Demo build · synthetic data only</span></div>
+    {% else %}
     <span class="side-hosp" title="{{ hospital }}">{{ hospital }}</span>
+    {% endif %}
   </div>
 </aside>
 
@@ -78,6 +81,21 @@
       <button class="btn sm kbd-save" type="submit">Show</button>
     </form>
     {% endif %}
+    {% set ns = notif_summary(user) %}
+    <details class="menu bell-menu">
+      <summary class="icon-btn bell-btn" aria-label="Notifications{% if ns.count %}: {{ ns.count }} unread{% endif %}">{{ icon('bell') }}{% if ns.count %}<span class="bell-count num">{{ ns.count if ns.count < 100 else '99+' }}</span>{% endif %}</summary>
+      <div class="menu-pop notif-pop">
+        <div class="notif-head"><strong>Notifications</strong><a href="/notifications" class="small">See all</a></div>
+        {% for n in ns['items'] %}
+        <form method="post" action="/notifications/{{ n.id }}/open" class="notif-row {{ 'unread' if not n.read_at }} sev-{{ n.severity }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit"><span class="sev-dot" aria-hidden="true"></span><span class="notif-t">{{ n.title }}</span><span class="notif-when num">{{ n.created_at[11:16] }}</span></button>
+        </form>
+        {% else %}
+        <p class="muted small notif-empty">Nothing new. Critical lab values, claims past their limit and complaints appear here.</p>
+        {% endfor %}
+      </div>
+    </details>
     <details class="menu user-menu">
       <summary class="avatar-btn" aria-label="Account menu for {{ user.full_name }}"><span class="avatar">{{ initials }}</span></summary>
       <div class="menu-pop">
@@ -93,6 +111,7 @@
 {% endif %}
 
 <main id="main" class="{% if user %}content{% else %}content bare{% endif %}" tabindex="-1">
+  {% if user and demo_build() %}<div class="demo-strip" role="note">{{ icon('alert', cls='ic xs') }} Demo version · all patients and figures are synthetic · not for clinical use</div>{% endif %}
   {% block content %}{% endblock %}
   {% if user %}<footer class="foot">{{ product }} · every message and change is recorded in the audit log.</footer>{% endif %}
 </main>

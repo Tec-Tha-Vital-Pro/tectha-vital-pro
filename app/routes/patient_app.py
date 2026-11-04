@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app import audit, billing, config, db, messaging, patients, security, util
+from app import diagnostics
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 TEMPLATES.env.filters["inr"] = util.inr
@@ -653,6 +654,10 @@ def report_detail(request: Request, order_id: int):
                  p["id"], order_id, "report")
     except LookupError:
         return _not_found(request, p, "report")
+    lab = diagnostics.patient_results(order_id)   # Pro: real results, only once validated
+    if lab is not None:
+        state, rows = lab
+        return _page(request, "patient/report.html", p, order=o, results=rows if state == "validated" else None)
     return _page(request, "patient/report.html", p, order=o, results=SAMPLE_RESULTS if demo_mode() else None)
 
 

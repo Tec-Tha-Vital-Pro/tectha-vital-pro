@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import config, db, scheduler, security
 from app.routes import api, patient_app, ui, webhooks
+from app.routes import command, diagnostics as diagnostics_routes
 
 HERE = Path(__file__).resolve().parent
 
@@ -20,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init_db()
+    command.add_optional_nav(_app)   # AI Labs / Account appear once their routes exist
     if config.settings.scheduler_enabled:
         scheduler.start(config.settings.scheduler_interval_seconds)
     yield
@@ -37,6 +39,8 @@ app.include_router(ui.router)
 app.include_router(api.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/webhooks")
 app.include_router(patient_app.router, prefix="/my")
+app.include_router(diagnostics_routes.router)
+app.include_router(command.router)
 
 
 @app.exception_handler(StarletteHTTPException)

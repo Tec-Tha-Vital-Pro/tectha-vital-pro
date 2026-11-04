@@ -272,6 +272,7 @@ AUTOMATIONS = {
     "detect_unbilled": detect_unbilled,
     "detect_stuck_claims": detect_stuck_claims,
     "daily_owner_report": daily_owner_report,
+    "diagnostics_sweep": lambda now: __import__("app.diagnostics", fromlist=["sweep"]).sweep(now),
 }
 
 

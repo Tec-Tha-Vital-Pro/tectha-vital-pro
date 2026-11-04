@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Command Centre{% endblock %}
+{% block body_class %}{% if wall %}wall-mode{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head" data-autorefresh="30">
+  <div class="page-title">
+    <h1>Command Centre</h1>
+    <p class="muted"><span class="num">{{ now.strftime('%H:%M') }}</span> · live view of {{ 'every branch' if not branch else branches|selectattr('id', 'equalto', branch)|map(attribute='name')|first }} · refreshes every 30 seconds</p>
+  </div>
+  <div class="page-actions">
+    {% if wall %}
+    <a class="btn" href="/command{% if branch and not user.branch_id %}?branch={{ branch }}{% endif %}">Exit wall mode</a>
+    {% else %}
+    <a class="btn" href="/command?wall=1{% if branch and not user.branch_id %}&amp;branch={{ branch }}{% endif %}">{{ icon('command') }} Wall screen</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if alerts %}
+<section class="cc-alerts" aria-label="Critical values waiting for a call-out">
+  {% for a in alerts %}
+  <a class="cc-alert" href="/diagnostics?tab=lab#lab-{{ a.lab_order_id }}">{{ icon('alert') }}<span><strong>Critical: {{ a.test_name }} {{ '%g'|format(a.result_value) }} {{ a.unit }} !!</strong> · {{ a.patient_name }} · Branch {{ a.branch_id }} · waiting since {{ a.created_at[11:16] }}</span><span class="cc-go">Call out ›</span></a>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="cc-grid">
+  {% for b in branches %}
+  <section class="panel cc-branch" aria-labelledby="ccb-{{ b.id }}">
+    <div class="panel-head"><h2 id="ccb-{{ b.id }}">{{ b.name }}</h2><span class="pill p-muted plain">Branch {{ b.id }}</span></div>
+    <div class="cc-tiles">
+      <div class="cc-tile"><span class="label">Beds occupied</span><span class="v num">{{ b.beds_occ }}<small>/{{ b.beds_total }}</small></span>
+        <span class="meter" role="img" aria-label="{{ b.occ_pct }} percent occupied"><span style="--w:{{ b.occ_pct }}%" class="{{ 'meter-bad' if b.occ_pct >= 90 else ('meter-warn' if b.occ_pct >= 75 else '') }}"></span></span></div>
+      <div class="cc-tile"><span class="label">OPD waiting</span><span class="v num">{{ b.opd_waiting }}</span><span class="d">{{ b.opd_seen }} seen today</span></div>
+      <a class="cc-tile {{ 'cc-bad' if b.critical_open }}" href="/diagnostics?tab=lab{% if not user.branch_id %}&amp;branch={{ b.id }}{% endif %}"><span class="label">Critical values open</span><span class="v num">{{ b.critical_open }}</span><span class="d">{{ b.awaiting_validation }} awaiting pathologist</span></a>
+      <a class="cc-tile {{ 'cc-warn' if b.claims_past }}" href="/claims{% if not user.branch_id %}?branch={{ b.id }}{% endif %}"><span class="label">Claims past limit</span><span class="v num">{{ b.claims_past }}</span><span class="d">IRDAI 1 h / 3 h</span></a>
+      <a class="cc-tile" href="/billing{% if not user.branch_id %}?branch={{ b.id }}{% endif %}"><span class="label">Unbilled services</span><span class="v num">{{ b.unbilled|inr }}</span><span class="d">{{ b.rx_pending }} prescription{{ '' if b.rx_pending == 1 else 's' }} to dispense</span></a>
+      <div class="cc-tile"><span class="label">Staff on duty</span><span class="v num">{{ b.staff_on_duty }}<small>/{{ b.staff_total }}</small></span><span class="d">logged in today</span></div>
+    </div>
+    <div class="cc-wards">
+      {% for w in b.wards %}
+      <div class="cc-ward"><span>{{ icon('bed', cls='ic xs') }} {{ w.name }}</span><span class="num">{{ w.occ or 0 }} occupied · {{ w.free or 0 }} free{% if w.cleaning %} · {{ w.cleaning }} cleaning{% endif %}</span></div>
+      {% else %}<p class="muted small">No wards set up yet.</p>{% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <p class="muted">No branches set up yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}

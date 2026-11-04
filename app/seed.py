@@ -6,6 +6,7 @@ import random
 from datetime import datetime, timedelta
 
 from app import billing, db, util
+from app import diagnostics
 
 FIRST = ["Aarav", "Priya", "Ramesh", "Anita", "Mohammed", "Sunita", "Vikram", "Lakshmi", "Arjun", "Fatima",
          "Rahul", "Kavita", "Suresh", "Meena", "Gopal", "Neha", "Harish", "Shabana", "Deepak", "Asha",
@@ -38,6 +39,7 @@ def seed(now: datetime | None = None) -> dict:
     now = (now or util.now()).replace(microsecond=0)
     rng = random.Random(42)
     db.init_db()
+    diagnostics.wipe()   # Pro module tables point at core rows: clear them first
     for t in WIPE:
         db.execute(f"DELETE FROM {t}")
     db.execute("INSERT INTO branches(id, name) VALUES ('A','Branch A'), ('B','Branch B') "
@@ -250,6 +252,7 @@ def seed(now: datetime | None = None) -> dict:
         "followups": db.scalar("SELECT COUNT(*) FROM followups"),
         "feedback": db.scalar("SELECT COUNT(*) FROM feedback"),
     }
+    summary.update(diagnostics.seed_diagnostics(now))
     return summary
 
 
