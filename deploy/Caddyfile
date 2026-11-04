@@ -1,4 +1,4 @@
-# Caddy reverse proxy with automatic HTTPS (Let's Encrypt) for Tec Tha Care Connect.
+# Caddy reverse proxy with automatic HTTPS (Let's Encrypt) for Tec Tha Vital.
 #
 # Needs: a domain (e.g. care.yourhospital.in) whose DNS A record points at this server,
 # and ports 80 and 443 open. Caddy gets and renews the certificate by itself.

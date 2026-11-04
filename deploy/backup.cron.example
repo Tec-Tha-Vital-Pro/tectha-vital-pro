@@ -1,4 +1,4 @@
-# Tec Tha Care Connect - cron jobs. Install with:  sudo cp deploy/backup.cron.example /etc/cron.d/tectha-care
+# Tec Tha Vital - cron jobs. Install with:  sudo cp deploy/backup.cron.example /etc/cron.d/tectha-care
 # (files in /etc/cron.d need the user column; times below are server time - check with `timedatectl`.
 #  An Indian VPS is often set to UTC: 21:00 UTC = 02:30 IST.)
 CRON_TZ=Asia/Kolkata

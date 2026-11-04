@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tec Tha Care Connect - one-command demo on a Mac or Linux laptop.
+# Tec Tha Vital - one-command demo on a Mac or Linux laptop.
 #
 #   ./scripts/setup-and-run-demo.sh                 set up, load sample data, start, open the browser
 #   ./scripts/setup-and-run-demo.sh --keep-data     do not reload the sample data
@@ -137,7 +137,7 @@ fi
 # ---- 7. Start
 echo
 echo "------------------------------------------------------------------"
-echo " Tec Tha Care Connect demo"
+echo " Tec Tha Vital demo"
 echo "   Open:      $URL/login"
 echo "   Login:     $ADMIN_USER"
 if [ -n "$SHOW_PASSWORD" ]; then

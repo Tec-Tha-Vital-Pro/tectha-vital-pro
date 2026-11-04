@@ -1,4 +1,4 @@
-# Tec Tha Care Connect - production image.
+# Tec Tha Vital - production image.
 #   docker build -t tectha-care .
 #   docker compose up -d            (see docker-compose.yml and docs/DEPLOY.md)
 FROM python:3.12-slim

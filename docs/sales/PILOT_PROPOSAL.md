@@ -24,7 +24,7 @@ We have not seen your data yet, so these are questions, not conclusions. We will
 
 ## 2. The pilot: one branch, one problem, 30–45 days
 
-We do not replace your CRM or billing software. Care Connect reads from them (daily export file or API), sends WhatsApp messages to patients who have agreed to receive them, and shows the results on one dashboard.
+We do not replace your CRM or billing software. Tec Tha Vital reads from them (daily export file or API), sends WhatsApp messages to patients who have agreed to receive them, and shows the results on one dashboard.
 
 - **Branch:** [Branch name]
 - **Problem chosen:** [ ] Pending dues collection  [ ] Appointment reminders and no-shows  [ ] Enquiry follow-up

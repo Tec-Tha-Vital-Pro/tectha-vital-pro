@@ -1,4 +1,4 @@
-# Tec Tha Care Connect with Docker.
+# Tec Tha Vital with Docker.
 #
 #   cp .env.example .env            then fill in real values (never commit .env)
 #   docker compose up -d app        app only, on http://127.0.0.1:8000 (laptop / behind your own proxy)

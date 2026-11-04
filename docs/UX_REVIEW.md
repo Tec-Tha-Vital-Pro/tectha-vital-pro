@@ -18,7 +18,7 @@ The problems are in task flow more than in looks:
 
 Counts: **Blocker 3 · Major 18 · Minor 17 · Polish 6**
 
-Note: the product is now called **Tec Tha Vital**, but many screens still say "Care Connect" (M18).
+Note: the product is now called **Tec Tha Vital**, but many screens still say "Tec Tha Vital" (M18).
 
 ---
 
@@ -151,11 +151,11 @@ Note: the product is now called **Tec Tha Vital**, but many screens still say "C
 - **Wrong:** Tokens are counted per branch per day, so the merged list shows token 2 twice and token 3 three times. They're given in booking order, so a 13:00 walk-in gets token 5 after a 13:15 token 3. Some booked visits show "—".
 - **Fix:** In the all-branches view, show the token with its branch, as `A-2` / `B-2` (the `.branch-code` style is already in `style.css`). Label the column "Token (per branch)". Show "—" only for cancelled visits, and say "At check-in" otherwise, as the patient app does.
 
-### M18. Screens still show the old product name "Care Connect" (product is now "Tec Tha Vital")
+### M18. Screens still show the old product name "Tec Tha Vital" (product is now "Tec Tha Vital")
 - **Screens:** Every staff screen, the staff login, the patient app header, patient Profile, the offline page, and the installed app name.
-- **Wrong:** These visible strings still say "Care Connect":
-  - `templates/base.html` line 6 (`<title>` default "Tec Tha Vital"), line 31 (sidebar `<small>Care Connect</small>`), line 57 (top bar "Tec Tha Vital") and line 95 (footer "Tec Tha Vital · every message and change is recorded…").
-  - `templates/login.html` line 6 (`aria-label="About Tec Tha Vital"`, which screen readers say aloud) and line 9 (brand `<small>Care Connect</small>`).
+- **Wrong:** These visible strings still say "Tec Tha Vital":
+  - `templates/base.html` line 6 (`<title>` default "Tec Tha Vital"), line 31 (sidebar `<small>Tec Tha Vital</small>`), line 57 (top bar "Tec Tha Vital") and line 95 (footer "Tec Tha Vital · every message and change is recorded…").
+  - `templates/login.html` line 6 (`aria-label="About Tec Tha Vital"`, which screen readers say aloud) and line 9 (brand `<small>Tec Tha Vital</small>`).
   - `templates/patient/base.html` line 25 (patient app bar `<small>Tec Tha Vital</small>`, on every patient screen).
   - `templates/patient/profile.html` line 28 (footer "· Tec Tha Vital").
   - `static/offline.html` lines 3 and 12 (title and body).

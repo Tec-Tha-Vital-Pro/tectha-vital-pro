@@ -42,7 +42,7 @@ Roll out all v1 automations at both branches; the owner dashboard and 9 am repor
 **Gate 2 → Core sync**
 - [ ] Both branches live for 30 days with the Gate 1 quality bars held.
 - [ ] Owner uses the dashboard or 9 am report on most working days (asked, not assumed).
-- [ ] Duplicate patients across branches: none created through Care Connect.
+- [ ] Duplicate patients across branches: none created through Tec Tha Vital.
 - [ ] The billing vendor has agreed an API or scheduled export, in writing, with a named contact.
 - [ ] Monthly results report delivered and accepted twice.
 

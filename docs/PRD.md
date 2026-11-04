@@ -48,7 +48,7 @@ Each feature: user story, acceptance criteria (AC) that QA can test, status, and
 - AC2: Phones are stored as `91XXXXXXXXXX` whatever format is typed; an invalid number is rejected with a message.
 - AC3: Each patient gets a `TT-xxxxxx` ID shown on the Patients screen and the patient page.
 - AC4: The patient page shows appointments, bills, messages and feedback from both branches.
-- **Metric:** duplicate registrations per month (target: zero new duplicates created through Care Connect).
+- **Metric:** duplicate registrations per month (target: zero new duplicates created through Tec Tha Vital).
 
 ### F2. Consent and opt-out — Built
 *As the hospital, I want no message sent without consent, so that we follow DPDP.*

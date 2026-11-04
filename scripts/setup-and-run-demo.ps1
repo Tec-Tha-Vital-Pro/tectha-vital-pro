@@ -1,4 +1,4 @@
-# Tec Tha Care Connect - one-command demo on a Windows laptop.
+# Tec Tha Vital - one-command demo on a Windows laptop.
 #
 #   Double-click setup-and-run-demo.bat, or in PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\setup-and-run-demo.ps1 [-Port 8010] [-NoBrowser] [-KeepData] [-Fresh]
@@ -122,7 +122,7 @@ if (-not $NoBrowser -and $env:TT_NO_BROWSER -ne "1") {
 # ---- 7. Start
 Write-Host ""
 Write-Host "------------------------------------------------------------------"
-Write-Host " Tec Tha Care Connect demo"
+Write-Host " Tec Tha Vital demo"
 Write-Host "   Open:      $Url/login"
 Write-Host "   Login:     $AdminUser"
 if ($ShowPassword) { Write-Host "   Password:  $ShowPassword   (random, shown only once; not saved anywhere)" }

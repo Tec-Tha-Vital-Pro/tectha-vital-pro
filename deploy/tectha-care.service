@@ -1,4 +1,4 @@
-# systemd unit for Tec Tha Care Connect on a small Linux VPS (no Docker).
+# systemd unit for Tec Tha Vital on a small Linux VPS (no Docker).
 #
 # Install (as root; full steps in docs/DEPLOY.md):
 #   useradd --system --home /opt/tectha-care --shell /usr/sbin/nologin tectha
@@ -10,7 +10,7 @@
 #   cp deploy/tectha-care.service /etc/systemd/system/ && systemctl daemon-reload
 #   systemctl enable --now tectha-care
 [Unit]
-Description=Tec Tha Care Connect
+Description=Tec Tha Vital
 After=network-online.target
 Wants=network-online.target
 
