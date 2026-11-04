@@ -164,3 +164,18 @@ def test_missed_call_api_key(client, monkeypatch):
                        headers={"X-API-Key": config.settings.api_key}).status_code == 400
     _settings(monkeypatch, api_key="")
     assert client.post("/webhooks/missed-call", json=body, headers={"X-API-Key": "x"}).status_code == 503
+
+
+def test_meta_retry_of_same_message_is_handled_once(fresh_db):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routes import webhooks
+    app = FastAPI(); app.include_router(webhooks.router, prefix="/webhooks")
+    c = TestClient(app)
+    body = {"entry": [{"changes": [{"value": {"messages": [
+        {"id": "wamid.TEST1", "from": "919811122233", "type": "text", "text": {"body": "Hi, need a doctor"}}]}}]}]}
+    first = c.post("/webhooks/whatsapp", json=body).json()["processed"][0]
+    second = c.post("/webhooks/whatsapp", json=body).json()["processed"][0]
+    assert first["action"] != "duplicate_ignored"
+    assert second["action"] == "duplicate_ignored"
+    assert fresh_db.scalar("SELECT COUNT(*) FROM leads WHERE phone='919811122233'") == 1

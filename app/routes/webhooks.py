@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
 from app import audit, config, db, messaging, patients, util
+from app.ai import client as ai_client
+from app.ai import receptionist
 
 router = APIRouter()
 
@@ -49,6 +51,8 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
     if p is None:
         lead = db.one("SELECT * FROM leads WHERE phone = ? AND status IN ('New','Contacted') ORDER BY id DESC LIMIT 1", (phone,))
         if lead:
+            if ai_client.enabled():
+                return {**receptionist.respond(phone, text, now, inbound_id=inbound_id), "lead_id": lead["id"]}
             _reply(phone, "ack_reply", f"Thank you. Our {hosp} team has your message and will reply shortly.", None)
             return {"action": "lead_existing", "lead_id": lead["id"]}
         ts = util.ts(now)
@@ -56,6 +60,8 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
             "INSERT INTO leads(name, phone, need, source, status, first_reply_seconds, created_at, updated_at)"
             " VALUES (?,?,?,?,'New',0,?,?)", ("WhatsApp enquiry", phone, text[:500], "WhatsApp", ts, ts))
         audit.log("webhook", "create", "lead", lead_id, {"source": "WhatsApp"})
+        if ai_client.enabled():
+            return {**receptionist.respond(phone, text, now, inbound_id=inbound_id), "lead_id": lead_id}
         branches = ", ".join(b["name"] for b in db.query("SELECT name FROM branches ORDER BY id"))
         _reply(phone, "welcome_reply",
                f"Hello! Thank you for contacting {hosp}.\nWe have branches at: {branches}.\n"
@@ -99,6 +105,8 @@ def handle_inbound(phone: str, text: str, now: datetime) -> dict:
         _reply(phone, "appt_cancelled", f"Your appointment {_appt_text(appt_id)} is cancelled. Message us any time to book again.", p["id"])
         return {"action": "appointment_cancelled", "appointment_id": appt_id}
 
+    if ai_client.enabled():
+        return receptionist.respond(phone, text, now, inbound_id=inbound_id)
     _task("followup_call", f"Reply to WhatsApp from {p['name']}: {text[:80]}", None, "message", inbound_id, now + timedelta(minutes=30), now)
     _reply(phone, "ack_reply", f"Thank you, {p['name']}. Our {hosp} team will reply to you shortly.", p["id"])
     return {"action": "staff_followup", "message_id": inbound_id}
@@ -144,6 +152,9 @@ async def receive(request: Request):
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             for m in change.get("value", {}).get("messages", []):
+                if not _first_delivery(m.get("id"), now):
+                    results.append({"from": m.get("from"), "action": "duplicate_ignored", "id": m.get("id")})
+                    continue
                 text = _extract_text(m)
                 if text is None:
                     audit.log("webhook", "inbound_unsupported", "message", None, {"from": m.get("from"), "type": m.get("type")})
@@ -155,6 +166,16 @@ async def receive(request: Request):
                     audit.log("webhook", "inbound_rejected", "message", None, {"from": m.get("from"), "error": str(e)})
                     results.append({"from": m.get("from"), "action": "rejected", "error": str(e)})
     return {"processed": results}
+
+
+def _first_delivery(message_id: str | None, now: datetime) -> bool:
+    """True the first time Meta delivers this message id; retries return False."""
+    if not message_id:
+        return True
+    with db.connect() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO processed_webhooks(message_id, received_at) VALUES (?, ?)",
+                           (message_id, util.ts(now)))
+        return cur.rowcount == 1
 
 
 # ---------- demo simulator ----------

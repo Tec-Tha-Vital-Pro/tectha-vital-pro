@@ -192,3 +192,9 @@ CREATE TABLE IF NOT EXISTS users (
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT NOT NULL
 );
+
+-- Meta retries webhooks; each WhatsApp message id is handled once.
+CREATE TABLE IF NOT EXISTS processed_webhooks (
+  message_id  TEXT PRIMARY KEY,
+  received_at TEXT NOT NULL
+);

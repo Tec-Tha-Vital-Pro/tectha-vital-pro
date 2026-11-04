@@ -8,6 +8,7 @@ Any other error propagates to the caller (the scheduler logs it to the audit log
 from datetime import date, datetime, timedelta
 
 from app import config, db, messaging, metrics, util
+from app.ai import insights
 
 DUES_STAGES = {1: 3, 2: 10, 3: 21}  # stage -> minimum bill age in days
 
@@ -223,6 +224,9 @@ def owner_report_text(now: datetime) -> str:
               f"  Services not yet billed: {util.inr(a['unbilled_amount'])}",
               f"  Missed calls not returned: {a['missed_calls_open']}",
               f"  Open complaints: {a['complaints_open']}"]
+    insight = insights.owner_insight(now)  # None when AI is off
+    if insight:
+        lines += ["", insight]
     return "\n".join(lines)
 
 
