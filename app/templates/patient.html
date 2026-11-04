@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, status_pill %}
+{% block title %}{{ p.name }}{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <span class="label">{{ p.uid }}</span>
+    <h1>{{ p.name }}</h1>
+    <p class="muted num">{{ p.phone }}{% if p.age %} · {{ p.age }} years{% endif %}{% if p.gender %} · {{ p.gender }}{% endif %}{% if p.abha_id %} · ABHA {{ p.abha_id }}{% endif %}</p>
+  </div>
+  <form method="post" action="/patients/{{ p.id }}/consent" class="consent">
+    {{ csrf_field(csrf) }}
+    {% if p.consent_messages %}
+      <span class="pill p-ok">WhatsApp consent given {{ (p.consent_at or '')[:10] }}</span>
+      <input type="hidden" name="consent" value="0"><button class="btn sm" type="submit">Withdraw consent</button>
+    {% else %}
+      <span class="pill p-muted">No consent: no messages are sent</span>
+      <input type="hidden" name="consent" value="1"><button class="btn sm primary" type="submit">Record consent</button>
+    {% endif %}
+  </form>
+</div>
+<div class="grid-2">
+  <section class="panel">
+    <h2>Appointments</h2>
+    <ul class="timeline">
+      {% for a in appts %}
+      <li><span class="num">{{ a.starts_at[:16] }}</span> · {{ a.doctor }} · {{ a.branch_name }} {{ status_pill(a.status) }}</li>
+      {% else %}<li class="muted">No appointments yet.</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Bills</h2>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Bill</th><th>Date</th><th>Branch</th><th class="r">Total</th><th class="r">Balance</th></tr></thead>
+      <tbody>
+      {% for b in bills %}
+      <tr><td class="num">{{ b.bill_no }}</td><td class="num">{{ b.created_at[:10] }}</td><td>{{ b.branch_name }}</td><td class="r num">{{ b.total|inr }}</td>
+      <td class="r num">{% if b.total > b.paid %}<span class="pill p-warn">{{ (b.total - b.paid)|inr }}</span>{% else %}<span class="pill p-ok">Paid</span>{% endif %}</td></tr>
+      {% else %}<tr><td colspan="5" class="muted">No bills yet.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+</div>
+<div class="grid-2">
+  <section class="panel">
+    <h2>Messages</h2>
+    <div class="chat compact">
+      {% for m in msgs|reverse %}
+      <div class="bubble {{ 'out' if m.direction == 'out' else 'in' }}"><span class="body">{{ m.body }}</span><span class="meta">{{ m.created_at[5:16] }} · {{ status_pill(m.status) }}</span></div>
+      {% else %}<p class="muted">No messages yet.</p>{% endfor %}
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Feedback</h2>
+    <ul class="timeline">
+      {% for f in feedback %}
+      <li><span class="num">{{ f.created_at[:10] }}</span> · Score <strong>{{ f.score }}/5</strong>{% if f.comment %} · {{ f.comment }}{% endif %}{% if f.escalated %} <span class="pill p-bad">Escalated</span>{% endif %}</li>
+      {% else %}<li class="muted">No feedback yet.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}Tec Tha Care Connect{% endblock %} · {{ hospital }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <span class="mark" aria-hidden="true">TT</span>
+      <span class="brand-text"><strong>{{ hospital }}</strong><small>Tec Tha Care Connect</small></span>
+    </a>
+    {% if user %}
+    <div class="who">
+      <span class="who-name">{{ user.full_name }} <span class="pill p-info">{{ user.role }}</span></span>
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn sm" type="submit">Log out</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% if nav %}
+  <nav class="tabs" aria-label="Screens">
+    <div class="wrap tabs-row">
+      {% for href, label in nav %}
+      <a href="{{ href }}" {% if (href == '/' and path == '/') or (href != '/' and path.startswith(href)) %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </div>
+  </nav>
+  {% endif %}
+</header>
+<main class="wrap page">
+  {% if msg %}<div class="flash ok" role="status">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="flash bad" role="alert">{{ err }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="wrap foot">Tec Tha Care Connect · Every message and change is recorded in the audit log.</footer>
+</body>
+</html>

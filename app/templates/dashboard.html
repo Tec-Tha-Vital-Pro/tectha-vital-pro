@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import branch_filter %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Owner dashboard</h1>
+    <p class="muted">{{ yday.strftime('%a %d %b') }} (yesterday) and today so far · built from billing and CRM data.</p>
+  </div>
+  {{ branch_filter(branches, branch, '/', user) }}
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span class="label">OPD visits yesterday</span><span class="v num">{{ k_yday.opd }}</span><span class="d muted">Today so far: {{ k_today.opd }} of {{ k_today.booked }} booked</span></div>
+  <div class="kpi"><span class="label">Billed yesterday</span><span class="v num">{{ k_yday.billed|inr }}</span><span class="d muted">Today: {{ k_today.billed|inr }}</span></div>
+  <div class="kpi"><span class="label">Collected yesterday</span><span class="v num">{{ k_yday.collected|inr }}</span><span class="d muted">Today: {{ k_today.collected|inr }}</span></div>
+  <div class="kpi"><span class="label">Outstanding dues</span><span class="v num">{{ k_today.dues|inr }}</span><span class="d"><a href="/billing">Open billing</a></span></div>
+  <div class="kpi"><span class="label">No-show rate, 30 days</span><span class="v num">{{ k_today.no_show_pct }}%</span><span class="d muted">Visited vs no-show</span></div>
+  <div class="kpi"><span class="label">Enquiries answered in 5 min</span><span class="v num">{{ speed.within_5_min_pct }}%</span><span class="d muted">{{ speed.enquiries }} today · {{ speed.not_replied }} not replied</span></div>
+</div>
+
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Collections, last 7 days</h2>
+      <div class="legend">{% for l in chart.legend %}<span><i style="background:{{ l.color }}"></i>{{ l.name }}</span>{% endfor %}</div>
+    </div>
+    {% if chart.empty %}
+      <p class="muted">No payments recorded in the last 7 days yet.</p>
+    {% else %}
+    <div class="chart">
+      <svg viewBox="0 0 {{ chart.W }} {{ chart.H }}" role="img" aria-label="Collections per day by branch, last 7 days">
+        {% for g in chart.grid %}
+        <line x1="{{ chart.pl }}" x2="{{ chart.right }}" y1="{{ g.y }}" y2="{{ g.y }}" class="gridline"/>
+        <text x="{{ chart.pl - 6 }}" y="{{ g.y + 4 }}" text-anchor="end" class="axis">{{ g.label }}</text>
+        {% endfor %}
+        {% for b in chart.bars %}
+        <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3" fill="{{ b.color }}"><title>{{ b.title }}</title></rect>
+        {% endfor %}
+        {% for l in chart.labels %}
+        <text x="{{ l.x }}" y="{{ chart.base }}" text-anchor="middle" class="axis">{{ l.text }}</text>
+        {% endfor %}
+      </svg>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Enquiry to paid patient, this month</h2>
+    <div class="funnel">
+      {% set top = steps[0][1] or 1 %}
+      {% for label, n in steps %}
+      <div class="frow"><span>{{ label }}</span><div class="ftrack"><div class="fbar" style="width:{{ (100 * n / top)|round(1) }}%"></div></div><span class="num r">{{ n }}</span></div>
+      {% endfor %}
+    </div>
+    {% if fun.enquiries %}
+    <p class="muted small">{{ (100 * fun.paid / fun.enquiries)|round|int }}% of enquiries became paying patients.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="grid-2">
+  <section class="panel">
+    <h2>Needs attention</h2>
+    <ul class="attn">
+      <li><a href="/claims">Insurance claims waiting past the time limit</a><span class="pill {{ 'p-bad' if attention.claims_stuck else 'p-ok' }}">{{ attention.claims_stuck }}</span></li>
+      <li><a href="/billing">Services done but not on a bill</a><span class="pill {{ 'p-bad' if attention.unbilled_amount else 'p-ok' }} num">{{ attention.unbilled_amount|inr }}</span></li>
+      <li><a href="/tasks">Missed calls not returned</a><span class="pill {{ 'p-warn' if attention.missed_calls_open else 'p-ok' }}">{{ attention.missed_calls_open }}</span></li>
+      <li><a href="/tasks">Open complaints</a><span class="pill {{ 'p-warn' if attention.complaints_open else 'p-ok' }}">{{ attention.complaints_open }}</span></li>
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Owner's WhatsApp report</h2>
+    {% if report %}
+      <p class="muted small">Last sent {{ report.created_at }} · {{ report.status }}</p>
+      <pre class="report">{{ report.body }}</pre>
+    {% else %}
+      <p class="muted">The 9 am report hasn't been sent yet. It goes out automatically each morning, or an admin can run automations from Settings.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, branch_filter %}
+{% block title %}Billing{% endblock %}
+{% block content %}
+<div class="head">
+  <div><h1>Billing follow-up</h1><p class="muted">Pending dues and services that never reached a bill. The billing software stays the source of truth.</p></div>
+  {{ branch_filter(branches, f_branch, '/billing', user) }}
+</div>
+<div class="kpis">
+  <div class="kpi"><span class="label">Outstanding dues</span><span class="v num">{{ total_due|inr }}</span><span class="d muted">{{ dues|length }} bills</span></div>
+  <div class="kpi"><span class="label">Possibly unbilled</span><span class="v num">{{ total_unbilled|inr }}</span><span class="d muted">{{ unbilled|length }} services</span></div>
+</div>
+<section class="panel">
+  <h2>Pending dues</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Bill</th><th>Patient</th><th>Branch</th><th class="r">Balance</th><th class="r">Age</th><th class="r">Reminders</th><th></th><th>Record payment</th></tr></thead>
+    <tbody>
+    {% for d in dues %}
+    <tr>
+      <td class="num">{{ d.bill_no }}</td>
+      <td><strong>{{ d.name }}</strong><br><span class="muted small">{{ d.uid }} · {{ d.phone }}</span></td>
+      <td>{% for b in branches if b.id == d.branch_id %}{{ b.name }}{% endfor %}</td>
+      <td class="r num"><strong>{{ d.balance|inr }}</strong></td>
+      <td class="r num"><span class="pill {{ 'p-bad' if d.age_days > 45 else ('p-warn' if d.age_days > 14 else 'p-info') }}">{{ d.age_days }} d</span></td>
+      <td class="r num">{{ d.reminders_sent }}</td>
+      <td><form method="post" action="/billing/{{ d.id }}/remind">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">Send reminder now</button></form></td>
+      <td>
+        <form method="post" action="/billing/{{ d.id }}/payment" class="row-form">
+          {{ csrf_field(csrf) }}
+          <input name="amount" type="number" min="1" max="{{ d.balance }}" value="{{ d.balance }}" aria-label="Amount for {{ d.bill_no }}" class="amt">
+          <select name="mode" aria-label="Mode">{% for m in modes %}<option>{{ m }}</option>{% endfor %}</select>
+          <button class="btn sm primary" type="submit">Save</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted">No pending dues.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+<section class="panel">
+  <h2>Possibly unbilled services</h2>
+  <p class="muted small">Done in lab, pharmacy or ward, with no matching line on any bill.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Done on</th><th>Patient</th><th>Department</th><th>Service</th><th>Branch</th><th class="r">Amount</th><th></th></tr></thead>
+    <tbody>
+    {% for o in unbilled %}
+    <tr>
+      <td class="num nowrap">{{ o.created_at[:16] }}</td>
+      <td><strong>{{ o.name }}</strong><br><span class="muted small">{{ o.uid }}</span></td>
+      <td>{{ o.dept }}</td><td>{{ o.description }}</td><td>{{ o.branch_name }}</td>
+      <td class="r num">{{ o.amount|inr }}</td>
+      <td><form method="post" action="/billing/orders/{{ o.id }}/add">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Add to bill</button></form></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Nothing unbilled. Every service is on a bill.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

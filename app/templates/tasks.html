@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, branch_filter %}
+{% block title %}Tasks{% endblock %}
+{% block content %}
+<div class="head">
+  <div><h1>Open tasks</h1><p class="muted">{{ total }} open · created automatically when something needs a person.</p></div>
+  {{ branch_filter(branches, f_branch, '/tasks', user) }}
+</div>
+{% for g in groups %}
+<section class="panel">
+  <h2>{{ g.label }} <span class="pill p-warn">{{ g.tasks|length }}</span></h2>
+  <div class="list">
+    {% for t in g.tasks %}
+    <div class="item">
+      <div><strong>{{ t.title }}</strong><div class="muted small">{{ t.branch_name or 'All branches' }} · created {{ t.created_at[5:16] }}{% if t.due_at %} · due {{ t.due_at[5:16] }}{% endif %} {% if t.overdue %}<span class="pill p-bad">Overdue</span>{% endif %}</div></div>
+      <form method="post" action="/tasks/{{ t.id }}/done">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Mark done</button></form>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<section class="panel"><p class="muted">No open tasks. Everything is handled.</p></section>
+{% endfor %}
+{% endblock %}

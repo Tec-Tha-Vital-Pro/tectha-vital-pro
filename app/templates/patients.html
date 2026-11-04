@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Patients{% endblock %}
+{% block content %}
+<div class="head">
+  <div><h1>Patients</h1><p class="muted">One record per mobile number, shared by all branches.</p></div>
+  <form method="get" action="/patients" class="inline-filter">
+    <input name="q" value="{{ q }}" placeholder="Name, mobile or TT- ID" aria-label="Search patients">
+    <button class="btn sm" type="submit">Search</button>
+  </form>
+</div>
+<section class="panel">
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Patient ID</th><th>Name</th><th>Mobile</th><th>Age</th><th>Messages</th><th>Registered</th></tr></thead>
+    <tbody>
+    {% for p in rows %}
+    <tr>
+      <td class="num"><a href="/patients/{{ p.id }}">{{ p.uid }}</a></td>
+      <td><a href="/patients/{{ p.id }}"><strong>{{ p.name }}</strong></a></td>
+      <td class="num">{{ p.phone }}</td>
+      <td class="num">{{ p.age or '—' }}</td>
+      <td>{% if p.consent_messages %}<span class="pill p-ok">Consent given</span>{% else %}<span class="pill p-muted">No consent</span>{% endif %}</td>
+      <td class="num nowrap">{{ p.created_at[:10] }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">{% if q %}No patient matches "{{ q }}".{% else %}No patients yet.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

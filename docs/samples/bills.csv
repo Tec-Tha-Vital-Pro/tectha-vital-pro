@@ -1,0 +1,7 @@
+bill_no,external_ref,phone,patient_name,branch_id,item,amount,paid,date
+HIS-24001,INV-77001,9845012345,Ramesh Kumar,B,Consultation - Orthopaedics,600,2050,2026-11-03
+HIS-24001,INV-77001,9845012345,Ramesh Kumar,B,X-ray knee (2 views),850,,2026-11-03
+HIS-24001,INV-77001,9845012345,Ramesh Kumar,B,Blood tests,1200,,2026-11-03
+HIS-24002,INV-77002,9900123456,Priya Sharma,A,Antenatal consultation,700,700,2026-11-03
+HIS-24003,INV-77003,9741234567,Mohammed Irfan,B,Paediatric consultation,500,0,2026-11-04
+HIS-24003,INV-77003,9741234567,Mohammed Irfan,B,CBC,350,,2026-11-04

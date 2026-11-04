@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_pill %}
+{% block title %}Messages{% endblock %}
+{% block content %}
+<div class="head">
+  <div><h1>WhatsApp messages</h1><p class="muted">Everything sent and received, newest first.</p></div>
+  <form method="get" action="/messages" class="inline-filter">
+    <input name="phone" value="{{ phone }}" placeholder="Filter by mobile" aria-label="Filter by mobile" inputmode="tel">
+    <button class="btn sm" type="submit">Filter</button>
+  </form>
+</div>
+<div class="grid-side">
+  <section class="panel">
+    <div class="msglog">
+      {% for m in rows %}
+      <div class="bubble {{ 'out' if m.direction == 'out' else 'in' }}">
+        <span class="meta-top">{% if m.direction == 'out' %}To{% else %}From{% endif %} {% if m.name %}<strong>{{ m.name }}</strong> {% endif %}<span class="num">{{ m.to_phone }}</span> · {{ m.template }}</span>
+        <span class="body">{{ m.body }}</span>
+        <span class="meta">{{ m.created_at[5:16] }} · {{ status_pill(m.status) }}{% if m.error %} <span class="small muted">{{ m.error }}</span>{% endif %}</span>
+      </div>
+      {% else %}
+      <p class="muted">No messages yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% if simulator %}
+  <section class="panel">
+    <h2>Simulate a patient message</h2>
+    <p class="muted small">Simulator mode: nothing reaches real phones. Type what a patient would send, for example "1" to confirm, a score from 1 to 5, or "STOP".</p>
+    <form method="post" action="/webhooks/simulate-inbound" class="stack">
+      <label for="s-phone">Patient mobile<input id="s-phone" name="phone" inputmode="tel" required></label>
+      <label for="s-text">Message<textarea id="s-text" name="text" rows="3" required></textarea></label>
+      <button class="btn primary" type="submit">Send as patient</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

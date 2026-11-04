@@ -1,0 +1,25 @@
+{% macro csrf_field(csrf) %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
+
+{% macro branch_filter(branches, current, action, user, extra={}) %}
+{% if not user.branch_id %}
+<form method="get" action="{{ action }}" class="inline-filter">
+  {% for k, v in extra.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <label for="bf-branch" class="label">Branch</label>
+  <select id="bf-branch" name="branch" onchange="this.form.submit()">
+    <option value="">All branches</option>
+    {% for b in branches %}<option value="{{ b.id }}" {% if current == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+  </select>
+  <noscript><button class="btn sm" type="submit">Show</button></noscript>
+</form>
+{% endif %}
+{% endmacro %}
+
+{% macro status_pill(s) -%}
+{%- set cls = {
+  'New':'p-info','Contacted':'p-acc','Booked':'p-ok','Converted':'p-ok','Lost':'p-muted',
+  'Confirmed':'p-ok','Visited':'p-ok','NoShow':'p-bad','Cancelled':'p-muted',
+  'simulated':'p-warn','sent':'p-ok','failed':'p-bad','blocked_no_consent':'p-bad','received':'p-info',
+  'Due':'p-warn','Reminded':'p-acc','Done':'p-ok','Open':'p-warn'
+}.get(s, 'p-info') -%}
+<span class="pill {{ cls }}">{{ {'NoShow':'No-show','blocked_no_consent':'Blocked: no consent'}.get(s, s) }}</span>
+{%- endmacro %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, branch_filter %}
+{% block title %}Claims{% endblock %}
+{% block content %}
+<div class="head">
+  <div><h1>Insurance and TPA claims</h1><p class="muted">Red cards have waited longer than the insurer's time limit (1 hour for pre-auth, 3 hours for discharge).</p></div>
+  {{ branch_filter(branches, f_branch, '/claims', user) }}
+</div>
+<div class="board">
+  {% for c in cols %}
+  <section class="col" aria-label="{{ c.label }}">
+    <h2 class="col-h"><span>{{ c.label }}</span><span class="num">{{ c.cards|length }}</span></h2>
+    {% for k in c.cards %}
+    <article class="card {{ 'stuck' if k.stuck else '' }}">
+      <strong>{{ k.name }}</strong>
+      <span class="muted small">{{ k.uid }} · {{ k.branch_name }}</span>
+      <span>{{ k.insurer }} · <span class="num">{{ k.amount|inr }}</span></span>
+      <span class="small">{% if k.stuck %}<span class="pill p-bad">Waiting {{ k.waiting }}</span>{% else %}In stage {{ k.waiting }}{% endif %}</span>
+      {% if c.key not in ('Settled', 'Denied') %}
+      <form method="post" action="/claims/{{ k.id }}/stage" class="row-form">
+        {{ csrf_field(csrf) }}
+        <select name="stage" aria-label="Move claim for {{ k.name }}">{% for s, lbl in stages if s != c.key %}<option value="{{ s }}">{{ lbl }}</option>{% endfor %}</select>
+        <button class="btn sm" type="submit">Move</button>
+      </form>
+      {% endif %}
+    </article>
+    {% else %}<p class="muted small">None</p>{% endfor %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

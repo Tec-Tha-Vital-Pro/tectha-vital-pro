@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, status_pill %}
+{% block title %}Enquiries{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Enquiries</h1>
+    <p class="muted">Every enquiry from every channel, with its source and branch.</p>
+  </div>
+</div>
+<div class="grid-side">
+  <section class="panel">
+    <form method="get" action="/leads" class="filters">
+      <select name="source" aria-label="Source"><option value="">All sources</option>{% for s in sources %}<option {% if s == f_source %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+      <select name="status" aria-label="Status"><option value="">All statuses</option>{% for s in statuses %}<option {% if s == f_status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+      {% if not user.branch_id %}<select name="branch" aria-label="Branch"><option value="">All branches</option>{% for b in branches %}<option value="{{ b.id }}" {% if b.id == f_branch %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select>{% endif %}
+      <button class="btn sm" type="submit">Filter</button>
+    </form>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Received</th><th>Name</th><th>Need</th><th>Source</th><th>Branch</th><th>First reply</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for l in rows %}
+      <tr>
+        <td class="num nowrap">{{ l.created_at[5:16] }}</td>
+        <td><strong>{{ l.name }}</strong><br><span class="muted small num">{{ l.phone }}</span></td>
+        <td>{{ l.need or '' }}</td>
+        <td>{{ l.source }}</td>
+        <td>{{ l.branch_name or '—' }}</td>
+        <td class="num">{% if l.first_reply_seconds is none %}<span class="pill p-bad">Waiting</span>{% elif l.first_reply_seconds < 60 %}{{ l.first_reply_seconds }} s{% elif l.first_reply_seconds < 3600 %}{{ l.first_reply_seconds // 60 }} min{% else %}{{ l.first_reply_seconds // 3600 }} h{% endif %}</td>
+        <td>
+          <form method="post" action="/leads/{{ l.id }}/status" class="row-form">
+            {{ csrf_field(csrf) }}
+            <select name="status" aria-label="Status for {{ l.name }}">{% for s in statuses %}<option {% if s == l.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+            <button class="btn sm" type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">No enquiries match these filters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  <section class="panel">
+    <h2>Add an enquiry</h2>
+    <p class="muted small">For walk-ins and calls. WhatsApp, website and ad enquiries arrive here automatically.</p>
+    <form method="post" action="/leads" class="stack">
+      {{ csrf_field(csrf) }}
+      <label for="l-name">Name<input id="l-name" name="name" required></label>
+      <label for="l-phone">Mobile number<input id="l-phone" name="phone" inputmode="tel" placeholder="98765 43210" required></label>
+      <label for="l-need">What they need<input id="l-need" name="need" placeholder="e.g. Knee pain, ortho"></label>
+      <label for="l-source">Source<select id="l-source" name="source">{% for s in sources %}<option>{{ s }}</option>{% endfor %}</select></label>
+      {% if not user.branch_id %}<label for="l-branch">Branch<select id="l-branch" name="branch_id">{% for b in branches %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}</select></label>{% endif %}
+      <button class="btn primary" type="submit">Add enquiry</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

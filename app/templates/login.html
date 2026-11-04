@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<section class="login">
+  <div class="panel">
+    <h1>Log in</h1>
+    <p class="muted">Staff access to {{ hospital }}'s patient communication and billing follow-up.</p>
+    {% if login_error %}<div class="flash bad" role="alert">{{ login_error }}</div>{% endif %}
+    <form method="post" action="/login" class="stack">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="username">Username<input id="username" name="username" autocomplete="username" value="{{ username or '' }}" required autofocus></label>
+      <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Log in</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
