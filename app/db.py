@@ -23,9 +23,16 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+# Feature modules add their own tables in app/schemas/*.sql (CREATE ... IF NOT EXISTS),
+# loaded after the core schema in file-name order.
+MODULE_SCHEMAS = Path(__file__).with_name("schemas")
+
+
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA.read_text())
+        for extra in sorted(MODULE_SCHEMAS.glob("*.sql")):
+            conn.executescript(extra.read_text())
     migrate()
 
 
