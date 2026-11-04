@@ -65,9 +65,9 @@ def _add_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> 
 def _rebuild_users(conn: sqlite3.Connection) -> None:
     """The role CHECK can't be altered in SQLite: copy users into a table with the new CHECK.
 
-    Runs in one transaction, and only when the stored definition doesn't allow 'owner' yet.
+    Runs in one transaction, and only when the stored definition doesn't allow the newest roles yet.
     """
-    if "'owner'" in _table_sql(conn, "users"):
+    if "'pharmacy'" in _table_sql(conn, "users"):
         return
     old_cols = _columns(conn, "users")
     conn.execute("BEGIN IMMEDIATE")
@@ -90,6 +90,10 @@ def migrate() -> None:
         _rebuild_users(conn)
         _add_column(conn, "users", "session_version", "INTEGER NOT NULL DEFAULT 0")
         _add_column(conn, "patients", "session_version", "INTEGER NOT NULL DEFAULT 0")
+        # Pro: two-step login (TOTP). The secret is set when enrolment starts; enabled only after a code checks out.
+        _add_column(conn, "users", "totp_secret", "TEXT")
+        _add_column(conn, "users", "totp_enabled", "INTEGER NOT NULL DEFAULT 0")
+        _add_column(conn, "users", "totp_last_step", "INTEGER NOT NULL DEFAULT 0")
     finally:
         conn.close()
 

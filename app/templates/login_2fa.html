@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Two-step login{% endblock %}
+{% block meta %}<meta name="description" content="Two-step login for {{ hospital }} staff, by {{ product }}.">{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <section class="login-form">
+    <div class="login-card">
+      <h1>Enter your code</h1>
+      <p class="muted">Open your authenticator app (Google Authenticator, Microsoft Authenticator or Authy) and type the 6-digit code for {{ product }}.</p>
+      {% if login_error %}<div class="err-box" role="alert">{{ icon('alert') }} {{ login_error }}</div>{% endif %}
+      <form method="post" action="/login/2fa" class="stack">
+        <input type="hidden" name="csrf" value="{{ pending_csrf }}">
+        <label for="code">6-digit code<input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9a-fA-F -]{6,16}" maxlength="16" required autofocus></label>
+        <button class="btn primary" type="submit">Continue</button>
+      </form>
+      <p class="fine">Lost your phone? Type one of your recovery codes instead, or ask an admin to turn off two-step login for you.</p>
+      <p class="fine"><a href="/login">Start again</a></p>
+    </div>
+  </section>
+</div>
+{% endblock %}

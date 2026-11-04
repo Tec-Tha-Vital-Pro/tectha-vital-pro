@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Voice assistant demo{% endblock %}
+{% block meta %}<meta name="description" content="Try the {{ product }} voice assistant: book, ask timings and fees in Indian languages.">{% endblock %}
+{% block content %}
+<div class="demo-note"><span class="pill p-warn">Demo</span> Sample hospital data. Bookings here become a call-back for the team.</div>
+{% set mode = 'demo' %}{% set token = voice_csrf %}
+{% include "_voice_panel.html" %}
+{% endblock %}

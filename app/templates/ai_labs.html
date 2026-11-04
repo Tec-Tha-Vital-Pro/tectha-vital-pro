@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon %}
+{% block title %}AI Labs{% endblock %}
+{% block content %}
+<div class="page-head"><div class="page-title"><h1>AI Labs</h1>
+  <p class="muted">Agents watch billing, claims, follow-ups and stock, and suggest what to fix. Nothing changes until a person accepts it. AI is decision support; people decide.</p></div></div>
+
+<section class="sec" aria-labelledby="al-agents">
+  <div class="sec-head"><h2 id="al-agents">Agents</h2><span class="pill {{ 'p-ok' if ai_on else 'p-info' }}">AI explanations {{ 'on' if ai_on else 'off' }}</span></div>
+  <div class="agent-grid">
+  {% for c in cards %}
+    <article class="agent-card" aria-labelledby="ag-{{ c.name }}">
+      <h3 id="ag-{{ c.name }}">{{ c.title }} <span class="pill {{ 'p-ok' if c.on else 'p-info' }}">{{ 'On' if c.on else 'Off' }}</span></h3>
+      <p class="muted small">{{ c.description }}</p>
+      <p class="small">{% if c.open %}<a href="/ai-labs?agent={{ c.name }}">{{ c.open }} open</a>{% else %}No open findings{% endif %}
+        {% if c.at_stake %} · {{ c.at_stake|inr }} at stake{% endif %}
+        · {% if c.last_run %}last checked {{ c.last_run[:16] }}{% else %}not run yet{% endif %}</p>
+      {% if can_decide %}
+      <div class="row-form">
+        <form method="post" action="/ai-labs/agents/{{ c.name }}/run" class="inline">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">Check now</button></form>
+        <form method="post" action="/ai-labs/agents/{{ c.name }}/toggle" class="inline">{{ csrf_field(csrf) }}<input type="hidden" name="on" value="{{ '0' if c.on else '1' }}"><button class="btn sm" type="submit">Turn {{ 'off' if c.on else 'on' }}</button></form>
+      </div>
+      {% endif %}
+    </article>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="al-find">
+  <div class="sec-head"><h2 id="al-find">Findings{% if agent %} · {{ (cards|selectattr('name','equalto',agent)|first).title }}{% endif %}</h2>
+    <nav class="chips" aria-label="Show">
+      {% for key, label in [('open','To decide'),('accepted','Accepted'),('dismissed','Dismissed')] %}
+      <a class="chip {{ 'on' if show == key }}" href="/ai-labs?show={{ key }}{{ ('&agent=' ~ agent) if agent }}"{% if show == key %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav></div>
+  {% if not findings %}
+    <p class="empty">Nothing here. {% if show == 'open' %}Press "Check now" on an agent, or wait for its next scheduled check.{% endif %}</p>
+  {% endif %}
+  <ul class="finding-list">
+  {% for f in findings %}
+    <li class="finding sev-{{ f.severity }}">
+      <div class="finding-head">
+        <span class="pill {{ 'p-bad' if f.severity == 'high' else 'p-warn' if f.severity == 'medium' else 'p-info' }}">{{ f.severity|capitalize }}</span>
+        <strong>{{ f.title }}</strong>{% if f.amount %} <span class="num">{{ f.amount|inr }}</span>{% endif %}
+      </div>
+      <p class="small">{{ f.suggested_action }}</p>
+      {% if f.ai_summary %}<p class="small ai-note">{{ icon('check') }} {{ f.ai_summary }}</p>{% endif %}
+      <details class="small"><summary>Evidence</summary><ul>{% for k, v in f.evidence_obj.items() %}<li>{{ k|replace('_',' ') }}: {{ v if v is not iterable or v is string else v|join(', ') }}</li>{% endfor %}</ul></details>
+      {% if f.status == 'open' %}
+        {% if can_decide %}
+        <div class="row-form">
+          <form method="post" action="/ai-labs/findings/{{ f.id }}/accept" class="inline">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Accept</button></form>
+          <form method="post" action="/ai-labs/findings/{{ f.id }}/dismiss" class="inline">{{ csrf_field(csrf) }}
+            <label class="visually-hidden" for="dn-{{ f.id }}">Reason</label><input id="dn-{{ f.id }}" name="note" placeholder="Reason for dismissing" maxlength="300" required>
+            <button class="btn sm" type="submit">Dismiss</button></form>
+          {% if ai_on and not f.ai_summary %}<form method="post" action="/ai-labs/findings/{{ f.id }}/explain" class="inline">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">Explain with AI</button></form>{% endif %}
+        </div>
+        {% else %}<p class="muted small">An admin decides findings.</p>{% endif %}
+      {% else %}
+        <p class="muted small">{{ f.status|capitalize }} by {{ f.decided_by }} at {{ (f.decided_at or '')[:16] }}{% if f.decision_note %}: {{ f.decision_note }}{% endif %}</p>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

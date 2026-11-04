@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon %}
+{% block title %}My account{% endblock %}
+{% block content %}
+<div class="page-head"><div class="page-title"><h1>My account</h1>
+  <p class="muted">{{ me.full_name }} · {{ me.username }} · {{ role_label }}{% if me.branch_id %} · Branch {{ me.branch_id }}{% endif %}</p></div></div>
+
+{% if must_set_up %}<div class="err-box" role="alert">{{ icon('alert') }} Your role needs two-step login. <a href="/account/2fa">Set it up now</a> to open the rest of {{ product }}.</div>{% endif %}
+
+<div class="settings-grid">
+  <section class="sec" aria-labelledby="ac-2fa">
+    <div class="sec-head"><h2 id="ac-2fa">Two-step login</h2>
+      <span class="pill {{ 'p-ok' if me.totp_enabled else 'p-warn' }}">{{ 'On' if me.totp_enabled else 'Off' }}</span></div>
+    {% if me.totp_enabled %}
+      <p class="muted small">After your password you type a code from your authenticator app. Recovery codes left: <strong>{{ codes_left }}</strong>.</p>
+      <form method="post" action="/account/2fa/recovery-codes" class="row-form">
+        {{ csrf_field(csrf) }}
+        <label for="rc-code">Code from your app<input id="rc-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="16" required></label>
+        <button class="btn" type="submit">Make new recovery codes</button>
+      </form>
+      {% if me.role not in required_roles %}
+      <form method="post" action="/account/2fa/disable" class="row-form">
+        {{ csrf_field(csrf) }}
+        <label for="d-pw">Password<input id="d-pw" name="password" type="password" autocomplete="current-password" required></label>
+        <label for="d-code">Code<input id="d-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="16" required></label>
+        <button class="btn danger" type="submit">Turn off two-step login</button>
+      </form>
+      {% else %}<p class="muted small">Your role must use two-step login, so it can't be turned off.</p>{% endif %}
+    {% else %}
+      <p class="muted small">Protect your login with a code from Google Authenticator, Microsoft Authenticator or Authy, so a stolen password alone can't open patient records.</p>
+      <p><a class="btn primary" href="/account/2fa">Set up two-step login</a></p>
+    {% endif %}
+  </section>
+
+  <section class="sec" aria-labelledby="ac-pw">
+    <div class="sec-head"><h2 id="ac-pw">Password</h2></div>
+    <form method="post" action="/account/password" class="stack">
+      {{ csrf_field(csrf) }}
+      <label for="pw-cur">Current password<input id="pw-cur" name="current" type="password" autocomplete="current-password" required></label>
+      <div class="two-col">
+        <label for="pw-new">New password <span class="hint">at least 8 characters</span><input id="pw-new" name="new" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label for="pw-conf">Type it again<input id="pw-conf" name="confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+      </div>
+      <div><button class="btn" type="submit">Change password</button></div>
+    </form>
+  </section>
+
+  <section class="sec" aria-labelledby="ac-sso">
+    <div class="sec-head"><h2 id="ac-sso">Sign in with Google or Microsoft</h2></div>
+    {% if identities %}
+    <ul class="plain-list">
+      {% for i in identities %}
+      <li>{{ i.provider|capitalize }} · {{ i.email }}
+        <form method="post" action="/account/identities/{{ i.id }}/remove" class="inline">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">Remove</button></form></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if sso %}
+      <p class="muted small">Link your work account once; after that you can sign in with it. Two-step login still applies.</p>
+      <p>{% for p, label in sso %}<a class="btn" href="/login/oidc/{{ p }}?link=1">Link {{ label }}</a> {% endfor %}</p>
+    {% else %}
+      <p class="muted small">Not set up for this hospital yet. An admin can turn it on with the hospital's Google Workspace or Microsoft 365 account.</p>
+    {% endif %}
+  </section>
+
+  <section class="sec" aria-labelledby="ac-dev">
+    <div class="sec-head"><h2 id="ac-dev">Other devices</h2></div>
+    <p class="muted small">You are signed out automatically after {{ idle_minutes }} minutes without activity, so a shared computer doesn't stay open.</p>
+    <form method="post" action="/account/sessions/end-others">{{ csrf_field(csrf) }}<button class="btn" type="submit">Sign out on every other device</button></form>
+  </section>
+
+  {% if me.role == 'admin' %}
+  <section class="sec" aria-labelledby="ac-pol">
+    <div class="sec-head"><h2 id="ac-pol">Two-step login policy</h2></div>
+    <p class="muted small">Staff in the ticked roles must set up two-step login before they can open any screen.</p>
+    <form method="post" action="/account/security-policy" class="stack">
+      {{ csrf_field(csrf) }}
+      <div class="two-col">
+      {% for role, label in role_labels.items() %}
+        <label class="check" for="pol-{{ role }}"><input id="pol-{{ role }}" type="checkbox" name="role_{{ role }}" value="1" {{ 'checked' if role in required_roles }}> {{ label }}</label>
+      {% endfor %}
+      </div>
+      <div><button class="btn" type="submit">Save policy</button></div>
+    </form>
+    {% if twofa_users %}
+    <h3 class="small">Lost phone</h3>
+    <p class="muted small">Turn off two-step login for someone who lost their phone. They set it up again at their next login.</p>
+    <ul class="plain-list">
+      {% for u in twofa_users %}
+      <li>{{ u.full_name }} ({{ u.username }})
+        <form method="post" action="/account/users/{{ u.id }}/2fa-reset" class="inline">{{ csrf_field(csrf) }}<button class="btn sm danger" type="submit">Reset two-step login</button></form></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -58,6 +58,8 @@ NAV = [
     ("/import", "Import", ADMIN, "Admin", "upload"),
     ("/settings", "Settings", ADMIN, "Admin", "settings"),
     ("/audit", "Audit log", ADMIN, "Admin", "audit"),
+    ("/ai-labs", "AI Labs", OWNER_VIEW, "Intelligence", "spark"),
+    ("/account", "My account", STAFF, "Account", "users"),
 ]
 # Bottom tab bar on phones: the most used screens per role (the rest go under "More").
 TABS = {
@@ -66,9 +68,13 @@ TABS = {
     "frontdesk": ["/leads", "/appointments", "/messages", "/tasks"],
     "billing": ["/billing", "/claims", "/tasks"],
     "doctor": ["/appointments", "/patients"],
+    "nurse": ["/appointments", "/patients", "/tasks"],
+    "lab": ["/tasks", "/account"],
+    "pharmacy": ["/tasks", "/account"],
 }
 BRANCH_AWARE = {"/", "/leads", "/appointments", "/billing", "/claims", "/tasks"}
-HOME = {"admin": "/", "owner": "/", "frontdesk": "/leads", "billing": "/billing", "doctor": "/appointments"}
+HOME = {"admin": "/", "owner": "/", "frontdesk": "/leads", "billing": "/billing", "doctor": "/appointments",
+        "nurse": "/appointments", "lab": "/tasks", "pharmacy": "/tasks"}
 
 
 class UIRoute(APIRoute):
@@ -83,6 +89,8 @@ class UIRoute(APIRoute):
             except auth.LoginRequired:
                 nxt = request.url.path
                 return RedirectResponse("/login" + (f"?next={quote(nxt)}" if nxt != "/" else ""), status_code=303)
+            except auth.TwoFactorSetupRequired:
+                return back("/account/2fa", err="Your role needs two-step login. Set it up to continue.")
             except auth.Forbidden:
                 return _error(request, 403, "You don't have access to this screen",
                               "Ask an admin to change your role if you need it.")
@@ -142,6 +150,9 @@ def render(request: Request, name: str, user: dict | None, status_code: int = 20
     base["undo"] = ok.get("u") if ok else None
     base["err"] = bad["t"] if bad else None
     base.update(ctx)
+    if name == "login.html" and "sso" not in base:
+        from app import oidc
+        base["sso"] = [(p, oidc.LABELS[p]) for p in oidc.enabled_providers()]
     return TEMPLATES.TemplateResponse(request, name, base, status_code=status_code)
 
 
@@ -277,7 +288,9 @@ def _message_scope(user: dict, alias: str = "m") -> tuple[str, tuple]:
 
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    return render(request, "login.html", None, next=request.query_params.get("next", ""))
+    from app import oidc
+    return render(request, "login.html", None, next=request.query_params.get("next", ""),
+                  sso=[(p, oidc.LABELS[p]) for p in oidc.enabled_providers()])
 
 
 @router.post("/login")
@@ -291,8 +304,19 @@ def login(request: Request, username: str = Form(""), password: str = Form(""), 
     if u is None:
         return render(request, "login.html", None, status_code=401, next=next, username=username,
                       login_error="Wrong username or password.")
-    dest = next if next.startswith("/") and not next.startswith("//") else HOME[u["role"]]
-    resp = RedirectResponse(dest, status_code=303)
+    return finish_login(request, u, next)
+
+
+def safe_next(next: str, role: str) -> str:
+    return next if next.startswith("/") and not next.startswith("//") else HOME[role]
+
+
+def finish_login(request: Request, u: dict, next: str) -> RedirectResponse:
+    """Password (or Google/Microsoft) checked: ask for the authenticator code if two-step login is on."""
+    from app.routes import account
+    if u.get("totp_enabled"):
+        return account.start_second_step(request, u, next)
+    resp = RedirectResponse(safe_next(next, u["role"]), status_code=303)
     auth.set_session_cookie(resp, request, u["id"])
     return resp
 

@@ -1,0 +1,6 @@
+{% extends "patient/base.html" %}
+{% block title %}Voice assistant{% endblock %}
+{% block content %}
+{% set mode = 'patient' %}{% set token = csrf %}
+{% include "_voice_panel.html" %}
+{% endblock %}

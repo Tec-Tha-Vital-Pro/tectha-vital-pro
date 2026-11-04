@@ -13,11 +13,14 @@ _lock = threading.Lock()
 def tick() -> dict | None:
     """Run one pass. Errors are printed and written to the audit log, never swallowed silently."""
     try:
-        return automations.run_all(util.now())
+        result = automations.run_all(util.now())
     except Exception as e:  # noqa: BLE001 - loop must survive and report
         traceback.print_exc(file=sys.stderr)
         audit.log("automation", "automation_error", "scheduler", None, f"{type(e).__name__}: {e}")
         return None
+    from app import agents          # AI Labs agents run on their own intervals; each failure is reported
+    result["agents"] = agents.run_due(util.now())
+    return result
 
 
 def _loop(interval: int) -> None:

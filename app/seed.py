@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from app import billing, db, util
 from app import diagnostics
+from app.agents import seed_pro as seed_pro_data
 
 FIRST = ["Aarav", "Priya", "Ramesh", "Anita", "Mohammed", "Sunita", "Vikram", "Lakshmi", "Arjun", "Fatima",
          "Rahul", "Kavita", "Suresh", "Meena", "Gopal", "Neha", "Harish", "Shabana", "Deepak", "Asha",
@@ -40,6 +41,7 @@ def seed(now: datetime | None = None) -> dict:
     rng = random.Random(42)
     db.init_db()
     diagnostics.wipe()   # Pro module tables point at core rows: clear them first
+    seed_pro_data.wipe()
     for t in WIPE:
         db.execute(f"DELETE FROM {t}")
     db.execute("INSERT INTO branches(id, name) VALUES ('A','Branch A'), ('B','Branch B') "
@@ -253,6 +255,7 @@ def seed(now: datetime | None = None) -> dict:
         "feedback": db.scalar("SELECT COUNT(*) FROM feedback"),
     }
     summary.update(diagnostics.seed_diagnostics(now))
+    summary.update(seed_pro_data.seed_pro(now, rng))   # AI Labs demo data
     return summary
 
 

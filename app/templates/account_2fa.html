@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon %}
+{% block title %}Two-step login{% endblock %}
+{% block content %}
+<div class="page-head"><div class="page-title"><h1>Two-step login</h1>
+  <p class="muted">After your password, {{ product }} asks for a 6-digit code from an app on your phone.</p></div></div>
+
+<section class="sec" aria-labelledby="tf-steps">
+{% if enabled %}
+  <div class="sec-head"><h2 id="tf-steps">Two-step login is on</h2><span class="pill p-ok">On</span></div>
+  <p><a class="btn" href="/account">Back to my account</a></p>
+{% elif secret %}
+  <div class="sec-head"><h2 id="tf-steps">Add {{ product }} to your authenticator app</h2></div>
+  <ol class="steps">
+    <li>Install Google Authenticator, Microsoft Authenticator or Authy on your phone.</li>
+    <li>In the app, tap <strong>+</strong> and scan this code.
+      {% if qr %}<p><img src="{{ qr }}" alt="QR code to add {{ product }} to your authenticator app" width="220" height="220"></p>{% endif %}
+      <p class="muted small">Can't scan? Choose "enter a setup key" and type: <code>{{ secret }}</code></p></li>
+    <li>Type the 6-digit code the app shows:
+      <form method="post" action="/account/2fa/confirm" class="row-form">
+        {{ csrf_field(csrf) }}
+        <label for="tf-code">Code<input id="tf-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus></label>
+        <button class="btn primary" type="submit">Turn on two-step login</button>
+      </form></li>
+  </ol>
+{% else %}
+  <div class="sec-head"><h2 id="tf-steps">Set up two-step login</h2></div>
+  <p class="muted small">It takes about a minute. You will need your phone.</p>
+  <form method="post" action="/account/2fa/start">{{ csrf_field(csrf) }}<button class="btn primary" type="submit">Start set-up</button></form>
+{% endif %}
+</section>
+{% endblock %}

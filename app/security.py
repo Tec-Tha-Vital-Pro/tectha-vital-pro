@@ -85,7 +85,7 @@ STATIC_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"same-origin"),
     (b"x-frame-options", b"DENY"),
-    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+    (b"permissions-policy", b"camera=(), microphone=(self), geolocation=()"),   # mic: voice assistant only
     (b"content-security-policy", CSP.encode()),
     # Everything here sits behind a login and holds patient data: never let search engines index it.
     (b"x-robots-tag", b"noindex, nofollow"),

@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT NOT NULL UNIQUE,
   full_name     TEXT NOT NULL,
   password_hash TEXT NOT NULL,          -- pbkdf2_sha256$iterations$salt_hex$hash_hex
-  role          TEXT NOT NULL CHECK (role IN ('admin','owner','frontdesk','billing','doctor')),
+  role          TEXT NOT NULL CHECK (role IN ('admin','owner','frontdesk','billing','doctor','nurse','lab','pharmacy')),
   branch_id     TEXT REFERENCES branches(id),   -- NULL = all branches
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT NOT NULL,
