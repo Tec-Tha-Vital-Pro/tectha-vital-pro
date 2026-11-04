@@ -1,6 +1,6 @@
 # Bug list
 
-Owner: QA Lead. Found in the Phase 1 run on 04 Nov 2026 (fresh seed, simulator mode, server on port 8020, `node tests/e2e/demo_flow.js`, plus targeted TestClient probes). Line numbers are from the working tree on that date. Teammates are still editing, so lines will move.
+Owner: QA Lead. BUG-001 to BUG-009 were found in the Phase 1 run on 04 Nov 2026, and BUG-011 to BUG-013 in the Phase 2 release run on build 4942f02 (fresh seed, simulator mode, server on port 8020, `node tests/e2e/demo_flow.js`, plus targeted TestClient probes). Line numbers are from the working tree on that date. Teammates are still editing, so lines will move.
 
 Severity: **Critical** = blocks the demo or leaks or loses data or money with no workaround. **High** = wrong money, privacy or patient messaging in a normal flow. **Medium** = wrong behaviour with a workaround, or limited reach. **Low** = cosmetic or edge case.
 
@@ -15,7 +15,10 @@ Severity: **Critical** = blocks the demo or leaks or loses data or money with no
 | BUG-007 | Medium | After reseeding on demo day, the 9 am owner report cannot be sent again | Fixed (architect): seed clears last_owner_report_date; e2e 17 passes with TT_OWNER_PHONE set |
 | BUG-008 | Low | Unit tests are out of date after deliberate UI and API changes | Fixed: full suite green (149 passed) |
 | BUG-009 | Low | Reply "1" can re-confirm an appointment that is already past or marked no-show | Fixed (architect): only future Booked/Confirmed visits are confirmed |
-| BUG-010 | Low | E2E step 13 regex expects "Balance due ₹", but the reminder says "balance due of ₹" | Open (QA: update the regex in tests/e2e/demo_flow.js; the message does include the link and the balance) |
+| BUG-010 | Low | E2E step 13 regex expects "Balance due ₹", but the reminder says "balance due of ₹" | Fixed in the test script (9ab4b0c); step 13 passes |
+| BUG-011 | Low | Manual "Send reminder now" sends a dues WhatsApp during quiet hours (9 pm to 8 am) | Open (needs a product decision) |
+| BUG-012 | Low | Patient app in Hindi: the code step and the footer are still in English | Open |
+| BUG-013 | Low | Phone width: patient-name links in list rows are 21 px tall, under the 24 px minimum touch target | Open |
 
 ---
 
@@ -93,11 +96,35 @@ At different moments today: `tests/test_ui.py::test_login_success_and_dashboard_
 **Expected:** only Booked visits in the future are confirmed. Otherwise reply "This appointment has passed, reply here to book again" and create a staff task.
 **Not yet reproduced** (Phase 2 e2e).
 
+## BUG-011 — Low — Manual dues reminder ignores quiet hours
+
+Found in the Phase 2 run at about 23:35 IST (build 4942f02).
+**Steps:** after 9 pm IST, open Billing and press Send reminder now on any bill with a balance.
+**Expected:** the same rule as the automations. `run_all` pauses patient messages from 9 pm to 8 am (`app/automations.py:293-307`, "patient messages paused for quiet hours"). Either the manual button holds the message until 8 am, or it asks "It is after 9 pm. Send anyway?"
+**Actual:** the payment reminder goes out at once, at night (status `simulated`, which means `sent` in live mode).
+**Where:** `app/routes/ui.py:656` `billing_remind` calls `automations.send_dues_reminder` with no `in_quiet_hours` check. Severity is Low because a staff member chose to send it. The Head of Product and Domain Lead should decide whether money reminders at night are acceptable.
+
+## BUG-012 — Low — Hindi patient login is partly English
+
+**Steps:** open /my/login on a phone, tap हिन्दी, enter a mobile number, then tap the "get code" button.
+**Expected:** every line in Hindi.
+**Actual:** these lines stay in English (screenshot `qa/mobile/my-unknown-hi.png`):
+- "If this number is registered with us, we have sent a 6-digit code on WhatsApp to …" (`app/templates/patient/login.html:32`)
+- "Demo: your code is on the staff Messages screen." (`:37`)
+- "Your health details stay private to you and your hospital." (`:49`)
+
+These lines are hard-coded and do not use `t()`. The field label and buttons are translated correctly.
+
+## BUG-013 — Low — Small touch targets at 390 px
+
+Patient-name links in the Billing, Appointments and Enquiries lists are 21 px tall at phone width. WCAG 2.2 (2.5.8) asks for at least 24 px. They still work, but they are easy to miss with a thumb. Owner: Product Designer / Front-end.
+
 ---
 
 ## E2E run log
 
 | Date | Build | Result | Notes |
 |---|---|---|---|
+| 04 Nov 2026, 23:3x IST | 4942f02 (UX round 3), port 8020, TT_OWNER_PHONE set, fresh seed | **23 PASS / 0 FAIL / 0 SKIP of 23** | The 5 failures and 3 skips reported after the redesign were drift in the test script, not product bugs: toasts are now signed (read from the toast region), the simulator moved to its own panel, the code label changed. Runs between 9 pm and 8 am: Run automations correctly sends nothing to patients, so the script creates the reminders by calling the automation functions directly (data setup only) |
 | 04 Nov 2026 | security fixes (port 8030, TT_OWNER_PHONE set) | 22 PASS / 1 FAIL / 0 SKIP of 23 | FAIL: 13 (BUG-010, regex in the test script). Without TT_OWNER_PHONE, 17 also fails, because the report is skipped and audited |
 | 04 Nov 2026 | working tree, mid-redesign | 17 PASS / 6 FAIL / 0 SKIP of 23 | FAIL: 07 (BUG-002), 09, 10, 11 and 22 (BUG-001), 17 (BUG-007, second seed of the day; it passed on the first run). Screenshots in the QA scratchpad `qa/` folder |

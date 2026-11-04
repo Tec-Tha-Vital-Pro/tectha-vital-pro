@@ -95,7 +95,7 @@ To automate in Phase 2 (in this order): role matrix (front desk, billing, doctor
 - Run the e2e flow on a fresh seed every time. It changes data (payments, bookings), so a second run on the same database is not a clean run.
 
 ```bash
-export TT_DB_PATH=/tmp/claude-0/-home-user/5f540028-1c92-5b5c-889b-342c486a270d/scratchpad/qa.db TT_API_KEY=qa-key TT_SCHEDULER=off
+export TT_DB_PATH=/tmp/claude-0/-home-user/5f540028-1c92-5b5c-889b-342c486a270d/scratchpad/qa.db TT_API_KEY=qa-key TT_SCHEDULER=off TT_OWNER_PHONE=919800000001
 python -m app.seed
 TT_ADMIN_PASSWORD='Qa@12345' python -m app.auth create-admin admin "QA Admin"   # first time only; seed keeps logins
 uvicorn app.main:app --port 8020 &
@@ -134,8 +134,19 @@ node tests/e2e/demo_flow.js            # E2E_BASE_URL, E2E_USER, E2E_PASSWORD, E
 - [ ] BUGS.md updated; every Critical or High bug closed and re-tested
 - [ ] Security sign-off: ______  Head of Product: ______  **QA Lead go / no-go: ______**
 
-## 9. Current status (Phase 1, 04 Nov 2026)
+## 9. Current status (Phase 2 release run, 04 Nov 2026, build 4942f02)
 
-- Unit suite: in flux while teammates edit the app. Two runs today: 97/99 passed, then 106/107. The failures were tests out of date after deliberate changes (dashboard heading, pay-page label, health response), not product bugs. Re-run after the redesign.
-- E2E demo flow: **17 passed, 6 failed, 0 skipped of 23** (fresh seed, port 8020). The failures come from BUG-001 (simulator blocked, 3 steps plus the 403 check), BUG-002 (idempotency) and BUG-007 (owner report after reseed).
-- **Release decision: NO-GO.** BUG-001 is Critical (it blocks demo section 3), and BUG-002 and BUG-003 are High.
+- Unit suite: **167 passed**.
+- E2E demo flow: **23 passed, 0 failed, 0 skipped of 23** (fresh seed, port 8020, TT_OWNER_PHONE set).
+- What changed in the script:
+  - Toast text is read from the page's live region, because ?msg / ?err are signed now.
+  - The simulator is found by its form name "Simulate a patient message", and its panel is opened when it is collapsed.
+  - The OTP field is found by the label "code".
+  - When the run falls in quiet hours (9 pm to 8 am IST), step 06 checks that no patient message was sent, then creates the reminders by calling the automation functions directly so steps 08–10 can run. Step 07 also repeats that direct run and expects 0 sends.
+- Exploratory check at phone width (390 px) on the demo screens: no horizontal page scroll; the bottom tab bar and More reach every screen; the simulator panel and the Record payment sheet both work; the claims board scrolls sideways inside its own area (by design); no JS errors. Found BUG-012 (Hindi gaps) and BUG-013 (small touch targets).
+- **Pilot demo decision: GO.** No Critical, High or Medium bug is open. BUG-001 to BUG-009 are fixed and re-tested end to end. The open bugs are Low (BUG-011, 012, 013) and need a fix date, not a block.
+- Conditions:
+  - Run the demo between 8 am and 9 pm IST, or the reminders will not appear (quiet hours, by design).
+  - Set TT_OWNER_PHONE.
+  - Reseed before the meeting.
+- Live go-live still needs the security sign-off and the items in GO_LIVE.md.

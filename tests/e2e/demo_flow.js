@@ -48,6 +48,24 @@ function sql(query, params = []) {
 }
 const one = (q, p) => sql(q, p)[0];
 
+/** Data setup for runs during quiet hours: call the reminder, feedback and dues automations
+ *  directly (bypassing only the 9 pm to 8 am pause in run_all) against the same database. */
+function automationsDirect() {
+  const py = [
+    'import json',
+    'from app import automations, util',
+    'now = util.now()',
+    'print(json.dumps({"appointment_reminders": automations.appointment_reminders(now),',
+    '                  "feedback_requests": automations.feedback_requests(now),',
+    '                  "dues_reminders": automations.dues_reminders(now)}))',
+  ].join('\n');
+  const out = execFileSync('python3', ['-c', py], {
+    encoding: 'utf8', cwd: path.resolve(__dirname, '..', '..'),
+    env: { ...process.env, TT_DB_PATH: DB, TT_SCHEDULER: 'off' },
+  });
+  return JSON.parse(out.trim().split('\n').pop());
+}
+
 function expect(cond, msg) {
   if (!cond) throw new Error(msg);
 }
@@ -74,26 +92,29 @@ async function step(page, name, fn) {
   }
 }
 
-/** The flash message after a POST/redirect. The page's JS strips ?msg / ?err from the address bar,
- *  so read them from the last main-frame document response, falling back to the current URL. */
-const lastDoc = new WeakMap();
-function trackDocs(page) {
-  page.on('response', r => {
-    if (r.request().resourceType() === 'document' && r.frame() === page.mainFrame()) lastDoc.set(page, r.url());
-  });
-}
-function flash(page) {
-  const u = new URL(lastDoc.get(page) || page.url());
-  return { msg: u.searchParams.get('msg') || '', err: u.searchParams.get('err') || '' };
+/** The flash (toast) after a POST/redirect. ?msg / ?err are signed tokens now, so read the
+ *  decoded text from the page: the live toast region (role=status for success, role=alert for errors). */
+function trackDocs() { /* kept for compatibility; toasts are read from the DOM */ }
+async function flash(page) {
+  const region = page.locator('[aria-live]').filter({ has: page.locator('[role=status], [role=alert]') }).first();
+  const read = async role => {
+    const loc = page.locator(`[aria-live] [role=${role}]`);
+    return (await loc.count()) ? (await loc.allInnerTexts()).join(' ').trim() : '';
+  };
+  try { await region.waitFor({ state: 'attached', timeout: 3000 }); } catch (_) { /* no toast */ }
+  return { msg: await read('status'), err: await read('alert') };
 }
 
 /** Type a patient message into the simulator box on Messages and send it. Throws if the server rejects it. */
 async function simulate(page, phone, text) {
-  await page.getByLabel(/patient mobile/i).fill(phone);
-  await page.getByLabel(/^message$/i).fill(text);
+  // The simulator is a collapsible panel under the conversation, separate from the staff reply box.
+  const form = page.getByRole('form', { name: /simulate a patient message/i });
+  if (!(await form.isVisible())) await page.getByText(/simulate a patient message/i).first().click();
+  await form.getByLabel(/patient mobile/i).fill(phone);
+  await form.getByLabel(/^message$/i).fill(text);
   const [resp] = await Promise.all([
     page.waitForResponse(r => r.url().includes('/webhooks/simulate-inbound') && r.request().method() === 'POST'),
-    page.getByRole('button', { name: /send as patient/i }).click(),
+    form.getByRole('button', { name: /send as patient/i }).click(),
   ]);
   await page.waitForLoadState('domcontentloaded');
   if (resp.status() >= 400) {
@@ -183,11 +204,24 @@ async function bodyText(page) {
     await page.goto(`${BASE}/settings`);
     await page.getByRole('button', { name: /run automations now/i }).click();
     await page.waitForLoadState('domcontentloaded');
-    const f = flash(page);
+    const f = await flash(page);
     const text = f.msg + ' ' + (await bodyText(page));
     expect(/automations ran/i.test(text), `no "Automations ran" confirmation (err=${f.err})`);
     ctxState.outAfter = one("SELECT COUNT(*) AS n FROM messages WHERE direction='out'").n;
-    const rem = one("SELECT COUNT(*) AS n FROM messages WHERE template LIKE 'appt_reminder_%'").n;
+    let rem = one("SELECT COUNT(*) AS n FROM messages WHERE template LIKE 'appt_reminder_%'").n;
+    if (/quiet hours/i.test(text)) {
+      // 9 pm to 8 am IST: patient messages are paused by design. Check nothing went to patients,
+      // then create the reminders the daytime run would send by calling the same automation code
+      // directly (data setup only), so the reply steps can still be tested.
+      expect(rem === 0, `${rem} reminders were sent during quiet hours`);
+      const pat = one("SELECT COUNT(*) AS n FROM messages WHERE direction='out' AND patient_id IS NOT NULL AND template<>'patient_otp'").n;
+      expect(pat === 0, `${pat} patient messages went out during quiet hours`);
+      ctxState.quiet = true;
+      ctxState.direct = automationsDirect();
+      rem = one("SELECT COUNT(*) AS n FROM messages WHERE template LIKE 'appt_reminder_%'").n;
+      expect(rem > 0, 'direct reminder run created no reminders');
+      return `quiet hours: nothing sent to patients (correct); data setup created ${rem} reminders directly`;
+    }
     expect(rem > 0, 'no appointment reminders were created');
     return `${ctxState.outAfter - ctxState.outBefore} new outbound messages, ${rem} appointment reminders`;
   });
@@ -201,6 +235,12 @@ async function bodyText(page) {
     const b = Object.fromEntries(before.map(r => [r.template, r.n]));
     const diff = after.filter(r => r.n !== (b[r.template] || 0)).map(r => `${r.template} +${r.n - (b[r.template] || 0)}`);
     expect(diff.length === 0, `second run sent more messages: ${diff.join(', ')}`);
+    if (ctxState.quiet) {
+      const again = automationsDirect();
+      const sent = Object.values(again).reduce((n, o) => n + (o.sent || 0) + (o.reminder_24h || 0) + (o.reminder_2h || 0), 0);
+      expect(sent === 0, `second direct run sent ${sent}: ${JSON.stringify(again)}`);
+      return 'quiet hours: also re-ran reminders, feedback and dues directly, 0 sent';
+    }
   });
 
   await step(page, '08 Messages screen shows a reminder', async () => {
@@ -272,7 +312,7 @@ async function bodyText(page) {
     expect(await btn.count() > 0, 'no "Send reminder" button on Billing');
     await btn.click();
     await page.waitForLoadState('domcontentloaded');
-    const f = flash(page);
+    const f = await flash(page);
     const after = one("SELECT COUNT(*) AS n FROM messages WHERE template='dues_reminder'").n;
     expect(after === before + 1, `dues_reminder messages ${before} -> ${after} (msg=${f.msg} err=${f.err})`);
     const m = one("SELECT body, status FROM messages WHERE template='dues_reminder' ORDER BY id DESC LIMIT 1");
@@ -317,7 +357,7 @@ async function bodyText(page) {
     const o = one('SELECT amount, patient_id, branch_id FROM orders WHERE id=?', [oid]);
     await buttons.first().click();
     await page.waitForLoadState('domcontentloaded');
-    const f = flash(page);
+    const f = await flash(page);
     expect(/added to bill/i.test(f.msg), `no "Added to bill" message (err=${f.err})`);
     const o1 = one('SELECT bill_id FROM orders WHERE id=?', [oid]);
     expect(o1.bill_id, 'order still has no bill');
@@ -368,13 +408,13 @@ async function bodyText(page) {
     expect(pat, 'no patient with a pending bill in the seed');
     await pp.getByLabel(/mobile number/i).fill(pat.phone.slice(2));
     await pp.getByRole('button', { name: /get code/i }).click();
-    await pp.getByLabel(/^code$/i).waitFor();
+    await pp.getByLabel(/code/i).waitFor();
     const m = one("SELECT body FROM messages WHERE to_phone=? AND template='patient_otp' ORDER BY id DESC LIMIT 1", [pat.phone]);
     expect(m, 'no OTP message stored');
     const code = (m.body.match(/\b(\d{6})\b/) || [])[1];
     expect(code, 'no 6-digit code in the OTP message');
     expect(!(await bodyText(pp)).includes(code), 'the OTP is shown on the login page');
-    await pp.getByLabel(/^code$/i).fill(code);
+    await pp.getByLabel(/code/i).fill(code);
     await pp.getByRole('button', { name: /log in/i }).click();
     await pp.waitForLoadState('domcontentloaded');
     expect(/\/my\/?$/.test(new URL(pp.url()).pathname), `not on patient home: ${pp.url()}`);
