@@ -65,7 +65,11 @@ def _parse_date(v: str) -> str:
     raise ValueError(f"date must be YYYY-MM-DD or DD-MM-YYYY, got {v!r}")
 
 
-def import_bills(csv_text: str, actor: str) -> dict:
+MAX_ROWS = 20_000
+
+
+def import_bills(csv_text: str, actor: str, only_branch: str | None = None) -> dict:
+    """Import bills. only_branch: a branch-bound admin may import bills for their own branch only."""
     result = {"created": 0, "updated": 0, "skipped": 0, "errors": []}
     groups: dict[str, list[tuple[int, dict]]] = {}
     for i, row in enumerate(_reader(csv_text, BILL_COLS), start=2):
@@ -84,6 +88,8 @@ def import_bills(csv_text: str, actor: str) -> dict:
             branch = (first.get("branch_id") or "").strip()
             if not db.one("SELECT id FROM branches WHERE id = ?", (branch,)):
                 raise ValueError(f"unknown branch_id {branch!r}")
+            if only_branch and branch != only_branch:
+                raise ValueError(f"branch_id {branch!r} is not your branch; you can import bills for branch {only_branch!r} only")
             name = (first.get("patient_name") or "").strip()
             if not name:
                 raise ValueError("patient_name is empty")

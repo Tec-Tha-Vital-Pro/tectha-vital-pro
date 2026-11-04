@@ -26,7 +26,7 @@
   <form method="post" action="/my/login/verify" class="stack" data-once>
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="phone" value="{{ phone }}">
-    <p>We sent a 6-digit code on WhatsApp to <strong class="num">{{ masked }}</strong>.</p>
+    <p>If this number is registered with us, we have sent a 6-digit code on WhatsApp to <strong class="num">{{ masked }}</strong>.</p>
     <label for="code" class="field-label">Code</label>
     <input id="code" name="code" class="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="••••••" required autofocus {% if field_err %}aria-invalid="true" aria-describedby="code-err"{% endif %}>
     {% if field_err %}<p class="field-err" id="code-err">{{ field_err }}</p>{% endif %}

@@ -71,10 +71,55 @@ def test_otp_login_success_and_code_not_shown(client, patient):
     assert db.one("SELECT * FROM audit_log WHERE action='patient_login'")
 
 
-def test_unknown_phone_gets_friendly_message_and_no_otp(client, fresh_db):
-    r = _ask_code(client, "9123456780")
-    assert "could not find this number" in r.text
-    assert db.scalar("SELECT COUNT(*) FROM messages WHERE template='patient_otp'") == 0
+def _strip_tokens(html: str) -> str:
+    html = re.sub(r'name="csrf" value="[^"]+"', "", html)
+    return re.sub(r'name="phone" value="\d+"|\+91 ••••• \d+', "", html)
+
+
+def test_unknown_phone_gets_same_page_as_known_and_no_otp(client, patient):
+    """S-08: the login must not reveal whether a number belongs to a patient."""
+    known = _ask_code(client, PHONE)
+    unknown = _ask_code(client, "9123456780")
+    assert known.status_code == unknown.status_code == 200
+    assert "If this number is registered" in unknown.text
+    assert _strip_tokens(known.text) == _strip_tokens(unknown.text)
+    assert db.scalar("SELECT COUNT(*) FROM messages WHERE template='patient_otp' AND to_phone='919123456780'") == 0
+    # A guessed code for the unknown number gets the same "not right" answer as for a real patient.
+    r = client.post("/my/login/verify", data={"csrf": _csrf(unknown.text), "phone": "919123456780", "code": "123456"})
+    assert r.status_code == 400 and "not right" in r.text
+
+
+def test_otp_sends_capped_per_ip(client, fresh_db):
+    """S-08: one caller can't trigger WhatsApp codes to many numbers."""
+    for i in range(patient_app.OTP_MAX_PER_IP_HOUR):
+        patients.find_or_create(f"P{i}", f"98765000{i:02d}", consent=True)
+        assert _ask_code(client, f"98765000{i:02d}").status_code == 200
+    r = _ask_code(client, "9876500099")
+    assert r.status_code == 429 and "wait an hour" in r.text
+    assert db.scalar("SELECT COUNT(*) FROM messages WHERE template='patient_otp'") == patient_app.OTP_MAX_PER_IP_HOUR
+    assert db.one("SELECT * FROM audit_log WHERE action='otp_throttled'")
+
+
+def test_patient_logout_ends_session_server_side(client, patient):
+    """S-10: a copied patient cookie stops working after logout."""
+    _login(client)
+    cookie = client.cookies.get(patient_app.COOKIE)
+    home = client.get("/my/profile")
+    client.post("/my/logout", data={"csrf": _csrf(home.text)})
+    client.cookies.clear()
+    client.cookies.set(patient_app.COOKIE, cookie)
+    assert client.cookies.get(patient_app.COOKIE) == cookie
+    r = client.get("/my/", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/my/login"
+
+
+def test_patient_cookie_secure_on_https_or_trusted_proxy(client, patient, monkeypatch):
+    """S-09: Secure flag on HTTPS; X-Forwarded-Proto counts only with TT_BEHIND_PROXY=1."""
+    r = client.get("/my/login", headers={"X-Forwarded-Proto": "https"})
+    assert "secure" not in r.headers["set-cookie"].lower()
+    monkeypatch.setenv("TT_BEHIND_PROXY", "1")
+    r = client.get("/my/login", headers={"X-Forwarded-Proto": "https"})
+    assert "secure" in r.headers["set-cookie"].lower()
 
 
 def test_wrong_code_and_attempt_limit(client, patient):

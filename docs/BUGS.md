@@ -6,15 +6,16 @@ Severity: **Critical** = blocks the demo or leaks or loses data or money with no
 
 | ID | Severity | Title | Status |
 |---|---|---|---|
-| BUG-001 | Critical | "Simulate a patient message" is rejected (403): the form has no CSRF token | Open (may be mid-change, re-test after redesign) |
-| BUG-002 | High | Dues reminders: an old bill gets stage 1, 2 and 3 reminders on back-to-back runs | Open |
-| BUG-003 | High | Branch-bound billing user can pay, remind, add to bill and move claims for another branch | Open |
-| BUG-004 | Medium | Messages screen is not limited to the user's branch | Open (needs a product decision) |
-| BUG-005 | Medium | "Send reminder now" on a paid or deleted bill crashes (HTTP 500) | Open |
-| BUG-006 | Low | "Automations ran" message shows raw Python dicts and a message id as a count | Open |
-| BUG-007 | Medium | After reseeding on demo day, the 9 am owner report cannot be sent again | Open |
-| BUG-008 | Low | Unit tests are out of date after deliberate UI and API changes | Open (re-run after redesign) |
-| BUG-009 | Low | Reply "1" can re-confirm an appointment that is already past or marked no-show | Open (found by reading the code, not yet reproduced) |
+| BUG-001 | Critical | "Simulate a patient message" is rejected (403): the form has no CSRF token | Fixed (architect): CSRF field on the simulator form; e2e 09–11 pass |
+| BUG-002 | High | Dues reminders: an old bill gets stage 1, 2 and 3 reminders on back-to-back runs | Fixed (architect): minimum gap between dues stages; e2e 07 passes |
+| BUG-003 | High | Branch-bound billing user can pay, remind, add to bill and move claims for another branch | Fixed: branch check on every id route returns 404 (tests/test_security.py) |
+| BUG-004 | Medium | Messages screen is not limited to the user's branch | Fixed: Messages scoped to the branch's patients and enquiries; owner report and OTP admin-only |
+| BUG-005 | Medium | "Send reminder now" on a paid or deleted bill crashes (HTTP 500) | Fixed: paid bill → friendly error; missing or other-branch bill → 404 page |
+| BUG-006 | Low | "Automations ran" message shows raw Python dicts and a message id as a count | Fixed: plain-English summary (automations.summary) |
+| BUG-007 | Medium | After reseeding on demo day, the 9 am owner report cannot be sent again | Fixed (architect): seed clears last_owner_report_date; e2e 17 passes with TT_OWNER_PHONE set |
+| BUG-008 | Low | Unit tests are out of date after deliberate UI and API changes | Fixed: full suite green (149 passed) |
+| BUG-009 | Low | Reply "1" can re-confirm an appointment that is already past or marked no-show | Fixed (architect): only future Booked/Confirmed visits are confirmed |
+| BUG-010 | Low | E2E step 13 regex expects "Balance due ₹", but the reminder says "balance due of ₹" | Open (QA: update the regex in tests/e2e/demo_flow.js; the message does include the link and the balance) |
 
 ---
 
@@ -98,4 +99,5 @@ At different moments today: `tests/test_ui.py::test_login_success_and_dashboard_
 
 | Date | Build | Result | Notes |
 |---|---|---|---|
+| 04 Nov 2026 | security fixes (port 8030, TT_OWNER_PHONE set) | 22 PASS / 1 FAIL / 0 SKIP of 23 | FAIL: 13 (BUG-010, regex in the test script). Without TT_OWNER_PHONE, 17 also fails, because the report is skipped and audited |
 | 04 Nov 2026 | working tree, mid-redesign | 17 PASS / 6 FAIL / 0 SKIP of 23 | FAIL: 07 (BUG-002), 09, 10, 11 and 22 (BUG-001), 17 (BUG-007, second seed of the day; it passed on the first run). Screenshots in the QA scratchpad `qa/` folder |

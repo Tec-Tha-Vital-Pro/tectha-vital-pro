@@ -27,7 +27,7 @@
       <span class="amt">{{ k.amount|inr }}</span>
       <span class="small"><strong>{{ k.name }}</strong> <span class="uid-sm">{{ k.uid }}</span></span>
       <span class="small {{ 'bad-text' if k.stuck else 'muted' }}">{% if k.stuck %}{{ icon('alert', cls='ic xs') }} Waiting {{ k.waiting }}{% else %}In this stage {{ k.waiting }}{% endif %}</span>
-      {% if c.key not in ('Settled', 'Denied') %}
+      {% if c.key not in ('Settled', 'Denied') and not readonly %}
       <form method="post" action="/claims/{{ k.id }}/stage" class="row-form">
         {{ csrf_field(csrf) }}
         <label for="mv-{{ k.id }}" class="sr-only">Move claim for {{ k.name }}</label>

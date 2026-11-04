@@ -148,7 +148,8 @@ def _looks_like_emergency(text: str) -> bool:
 @router.get("/whatsapp")
 def verify(request: Request):
     q = request.query_params
-    if q.get("hub.mode") == "subscribe" and q.get("hub.verify_token") == config.settings.whatsapp_verify_token:
+    token = q.get("hub.verify_token", "")
+    if q.get("hub.mode") == "subscribe" and hmac.compare_digest(token.encode(), config.settings.whatsapp_verify_token.encode()):
         return PlainTextResponse(q.get("hub.challenge", ""))
     raise HTTPException(403, "Verification token does not match TT_WHATSAPP_VERIFY_TOKEN")
 
@@ -175,7 +176,7 @@ async def receive(request: Request):
     if secret:
         sig = request.headers.get("X-Hub-Signature-256", "")
         expected = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected):
+        if not hmac.compare_digest(sig.encode(), expected.encode()):
             raise HTTPException(401, "Invalid X-Hub-Signature-256")
     try:
         payload = json.loads(raw)
@@ -222,7 +223,7 @@ async def simulate_inbound(request: Request):
     data = await request.json() if is_json else dict(await request.form())
     # Only logged-in staff (form + CSRF token) or a script holding the API key may fake patient messages.
     key = config.settings.api_key
-    by_key = bool(key) and hmac.compare_digest(request.headers.get("X-API-Key", ""), key)
+    by_key = bool(key) and hmac.compare_digest(request.headers.get("X-API-Key", "").encode(), key.encode())
     if not by_key:
         user = auth.current_user(request)
         if user is None:
@@ -230,7 +231,7 @@ async def simulate_inbound(request: Request):
                 raise HTTPException(401, "Log in, or send X-API-Key")
             return RedirectResponse("/login", status_code=303)
         token = data.get("csrf", "")
-        if not (isinstance(token, str) and hmac.compare_digest(token, user["csrf"])):
+        if not (isinstance(token, str) and hmac.compare_digest(token.encode(), user["csrf"].encode())):
             raise HTTPException(403, "This form has expired. Reload the page and try again.")
     phone, text = data.get("phone"), data.get("text")
     if not phone or not text:
@@ -251,7 +252,7 @@ async def missed_call(request: Request):
     key = config.settings.api_key
     if not key:
         raise HTTPException(503, "Set TT_API_KEY to accept missed-call events")
-    if not hmac.compare_digest(request.headers.get("X-API-Key", ""), key):
+    if not hmac.compare_digest(request.headers.get("X-API-Key", "").encode(), key.encode()):
         raise HTTPException(401, "Missing or wrong X-API-Key")
     data = await request.json()
     try:

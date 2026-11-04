@@ -17,7 +17,7 @@ def require_key(x_api_key: str | None = Header(default=None)) -> None:
     expected = config.settings.api_key
     if not expected:
         raise HTTPException(status_code=503, detail="Set TT_API_KEY to enable the API")
-    if not x_api_key or not hmac.compare_digest(x_api_key, expected):
+    if not x_api_key or not hmac.compare_digest(x_api_key.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="Missing or wrong X-API-Key header")
 
 

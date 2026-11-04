@@ -1,4 +1,5 @@
 """SQLite access. One connection per call site; rows come back as dicts."""
+import re
 import sqlite3
 from pathlib import Path
 
@@ -25,6 +26,65 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA.read_text())
+    migrate()
+
+
+# ---------------------------------------------------------------- migrations
+# schema.sql only uses CREATE ... IF NOT EXISTS, so a database created by an older
+# version keeps its old tables. These steps bring it up to date. Each one checks
+# first, so running init_db() again changes nothing.
+
+def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+
+
+def _table_sql(conn: sqlite3.Connection, table: str) -> str:
+    r = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+    return r[0] if r else ""
+
+
+def _schema_create(table: str) -> str:
+    m = re.search(rf"CREATE TABLE IF NOT EXISTS {table} \((.*?)\n\);", SCHEMA.read_text(), re.S)
+    if not m:
+        raise RuntimeError(f"schema.sql has no CREATE TABLE for {table}")
+    return m.group(1)
+
+
+def _add_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    if column not in _columns(conn, table):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _rebuild_users(conn: sqlite3.Connection) -> None:
+    """The role CHECK can't be altered in SQLite: copy users into a table with the new CHECK.
+
+    Runs in one transaction, and only when the stored definition doesn't allow 'owner' yet.
+    """
+    if "'owner'" in _table_sql(conn, "users"):
+        return
+    old_cols = _columns(conn, "users")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(f"CREATE TABLE users_new ({_schema_create('users')}\n)")
+        keep = [c for c in _columns(conn, "users_new") if c in old_cols]
+        cols = ", ".join(keep)
+        conn.execute(f"INSERT INTO users_new ({cols}) SELECT {cols} FROM users")
+        conn.execute("DROP TABLE users")
+        conn.execute("ALTER TABLE users_new RENAME TO users")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def migrate() -> None:
+    conn = sqlite3.connect(_db_path, timeout=10, isolation_level=None)
+    try:
+        _rebuild_users(conn)
+        _add_column(conn, "users", "session_version", "INTEGER NOT NULL DEFAULT 0")
+        _add_column(conn, "patients", "session_version", "INTEGER NOT NULL DEFAULT 0")
+    finally:
+        conn.close()
 
 
 def query(sql: str, params: tuple | dict = ()) -> list[dict]:

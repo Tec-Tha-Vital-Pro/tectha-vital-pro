@@ -308,3 +308,48 @@ def run_all(now: datetime) -> dict:
         else:
             out[name] = fn(now)
     return out
+
+
+def _n(count: int, one: str, many: str | None = None) -> str:
+    return f"{count} {one if count == 1 else (many or one + 's')}"
+
+
+def summary(counts: dict) -> str:
+    """Plain-English result of run_all() for the staff screen, e.g.
+    '39 appointment reminders sent (4 blocked: no consent) · 11 dues reminders sent · owner report sent.'"""
+    parts: list[str] = []
+    paused = [k for k, v in counts.items() if isinstance(v, str) and v.startswith("quiet")]
+    off = [k for k, v in counts.items() if v == "off"]
+
+    def blocked(r: dict) -> str:
+        return f" ({r['blocked']} blocked: no consent)" if r.get("blocked") else ""
+
+    r = counts.get("appointment_reminders")
+    if isinstance(r, dict):
+        parts.append(_n(r.get("reminder_24h", 0) + r.get("reminder_2h", 0), "appointment reminder") + " sent" + blocked(r))
+    r = counts.get("dues_reminders")
+    if isinstance(r, dict):
+        txt = _n(r.get("sent", 0), "dues reminder") + " sent" + blocked(r)
+        if r.get("call_tasks"):
+            txt += f", {_n(r['call_tasks'], 'call task')} for old dues"
+        parts.append(txt)
+    r = counts.get("feedback_requests")
+    if isinstance(r, dict):
+        parts.append(_n(r.get("sent", 0), "feedback request") + " sent" + blocked(r))
+    r = counts.get("followup_reminders")
+    if isinstance(r, dict):
+        parts.append(_n(r.get("sent", 0), "follow-up reminder") + " sent" + blocked(r))
+    r = counts.get("detect_unbilled")
+    if isinstance(r, dict):
+        parts.append(_n(r.get("tasks_created", 0), "new unbilled-service task"))
+    r = counts.get("detect_stuck_claims")
+    if isinstance(r, dict):
+        parts.append(_n(r.get("tasks_created", 0), "new stuck-claim alert"))
+    if "daily_owner_report" in counts and counts["daily_owner_report"] not in ("off",):
+        parts.append("owner report sent" if isinstance(counts["daily_owner_report"], int)
+                     else "owner report not due (it goes once a day after 9 am)")
+    if paused:
+        parts.append("patient messages paused for quiet hours (9 pm to 8 am)")
+    if off:
+        parts.append("switched off: " + ", ".join(k.replace("_", " ") for k in off))
+    return " · ".join(parts) + "." if parts else "Nothing to do."

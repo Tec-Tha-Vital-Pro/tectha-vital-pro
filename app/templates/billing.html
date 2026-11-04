@@ -32,6 +32,7 @@
         <td class="r num" data-label="Age"><span class="age {{ 'bad' if d.age_days > 45 else ('warn' if d.age_days > 14 else '') }}">{{ d.age_days }} days</span></td>
         <td class="r num" data-label="Reminders">{{ d.reminders_sent }}{% if d.last_reminder_at %}<span class="sub">last {{ d.last_reminder_at[8:10] }}/{{ d.last_reminder_at[5:7] }}</span>{% endif %}</td>
         <td class="actions r" data-label="">
+          {% if not readonly %}
           <form method="post" action="/billing/{{ d.id }}/remind">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ icon('send') }} Send reminder now</button></form>
           <button type="button" class="btn sm primary" data-open="pay-{{ d.id }}">Record payment</button>
           <dialog id="pay-{{ d.id }}" class="slide" aria-labelledby="pay-h-{{ d.id }}">
@@ -50,6 +51,7 @@
               </form>
             </div>
           </dialog>
+          {% endif %}
         </td>
       </tr>
       {% else %}
@@ -77,7 +79,7 @@
         <td data-label="Service">{{ o.description }}</td>
         <td data-label="Branch">{{ o.branch_name }}</td>
         <td class="r num" data-label="Amount"><strong>{{ o.amount|inr }}</strong></td>
-        <td class="actions r" data-label=""><form method="post" action="/billing/orders/{{ o.id }}/add">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Add to bill</button></form></td>
+        <td class="actions r" data-label="">{% if not readonly %}<form method="post" action="/billing/orders/{{ o.id }}/add">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Add to bill</button></form>{% endif %}</td>
       </tr>
       {% else %}
       <tr class="empty-row"><td colspan="7" class="empty-cell">{{ empty('check', 'Nothing unbilled', 'Every lab, pharmacy and ward order is on a bill.') }}</td></tr>

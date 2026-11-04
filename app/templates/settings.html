@@ -29,10 +29,24 @@
   <div class="sec-head"><h2 id="st-users">Staff logins</h2><span class="muted small">One login per person. No shared accounts.</span></div>
   <div class="tbl-wrap cards">
     <table>
-      <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Branch</th><th>Status</th></tr></thead>
+      <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Branch</th><th>Status</th><th class="r">Actions</th></tr></thead>
       <tbody>
       {% for u in users %}
-      <tr><td class="mono-id" data-label="Username">{{ u.username }}</td><td class="lead-cell"><strong>{{ u.full_name }}</strong></td><td data-label="Role">{{ u.role|capitalize }}</td><td data-label="Branch">{{ u.branch_name or 'All branches' }}</td><td data-label="Status">{% if u.active %}<span class="pill p-ok">Active</span>{% else %}<span class="pill p-muted">Disabled</span>{% endif %}</td></tr>
+      <tr><td class="mono-id" data-label="Username">{{ u.username }}</td><td class="lead-cell"><strong>{{ u.full_name }}</strong></td><td data-label="Role">{{ u.role|capitalize }}</td><td data-label="Branch">{{ u.branch_name or 'All branches' }}</td><td data-label="Status">{% if u.active %}<span class="pill p-ok">Active</span>{% else %}<span class="pill p-muted">Disabled</span>{% endif %}</td>
+        <td class="actions r" data-label="">
+          <form method="post" action="/settings/users/{{ u.id }}/password" class="row-form">
+            {{ csrf_field(csrf) }}
+            <label for="pw-{{ u.id }}" class="sr-only">New password for {{ u.username }}</label>
+            <input id="pw-{{ u.id }}" name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="New password">
+            <button class="btn sm" type="submit">Reset password</button>
+          </form>
+          {% if u.id != me_id %}
+          <form method="post" action="/settings/users/{{ u.id }}/active">
+            {{ csrf_field(csrf) }}<input type="hidden" name="active" value="{{ '0' if u.active else '1' }}">
+            <button class="btn sm {{ 'danger' if u.active }}" type="submit">{{ 'Deactivate' if u.active else 'Reactivate' }}</button>
+          </form>
+          {% endif %}
+        </td></tr>
       {% endfor %}
       </tbody>
     </table>

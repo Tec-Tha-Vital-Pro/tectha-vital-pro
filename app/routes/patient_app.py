@@ -16,17 +16,19 @@ from fastapi.routing import APIRoute
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from app import audit, billing, config, db, messaging, patients, util
+from app import audit, billing, config, db, messaging, patients, security, util
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 TEMPLATES.env.filters["inr"] = util.inr
 
 COOKIE = "tt_patient"
 PRE_COOKIE = "tt_pcsrf"           # double-submit CSRF token for the login forms (no session yet)
-MAX_AGE = 30 * 24 * 3600
+MAX_AGE = 7 * 24 * 3600          # a lost or shared phone stays logged in for a week at most (S-10)
 OTP_TTL = timedelta(minutes=5)
 OTP_MAX_ATTEMPTS = 5
-OTP_MAX_PER_10_MIN = 3
+OTP_MAX_PER_10_MIN = 3            # per mobile number
+OTP_MAX_PER_IP_HOUR = 10          # per caller IP, known and unknown numbers alike (S-08)
+OTP_MAX_GLOBAL_HOUR = 300         # whole hospital: caps WhatsApp cost if many IPs are used
 SLOT_TIMES = [f"{h:02d}:{m:02d}" for h in range(9, 13) for m in (0, 30)] + \
              [f"{h:02d}:{m:02d}" for h in range(16, 19) for m in (0, 30)]
 
@@ -97,8 +99,8 @@ def current_patient(request: Request) -> dict | None:
     except (BadSignature, SignatureExpired):
         return None
     p = db.one("SELECT * FROM patients WHERE id = ?", (data.get("p"),))
-    if p is None:
-        return None
+    if p is None or data.get("v") != p["session_version"]:
+        return None  # logged out since this cookie was issued
     p["csrf"] = data["c"]
     return p
 
@@ -115,7 +117,7 @@ async def _me_post(request: Request) -> tuple[dict, dict]:
     p = _me(request)
     form = await request.form()
     token = form.get("csrf", "")
-    if not (isinstance(token, str) and hmac.compare_digest(token, p["csrf"])):
+    if not (isinstance(token, str) and hmac.compare_digest(token.encode(), p["csrf"].encode())):
         raise CsrfFailed()
     return p, form
 
@@ -183,14 +185,14 @@ def _pre_token(request: Request) -> str:
 def _check_pre(request: Request, form) -> None:
     cookie = request.cookies.get(PRE_COOKIE, "")
     token = form.get("csrf", "")
-    if not (cookie and isinstance(token, str) and hmac.compare_digest(token, cookie)):
+    if not (cookie and isinstance(token, str) and hmac.compare_digest(token.encode(), cookie.encode())):
         raise CsrfFailed()
 
 
 def _login_page(request: Request, step: str, status_code: int = 200, **ctx) -> HTMLResponse:
     token = _pre_token(request)
     resp = _page(request, "patient/login.html", None, status_code=status_code, step=step, csrf=token, **ctx)
-    resp.set_cookie(PRE_COOKIE, token, httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/my")
+    resp.set_cookie(PRE_COOKIE, token, httponly=True, samesite="lax", secure=security.is_https(request), path="/my")
     return resp
 
 
@@ -212,22 +214,34 @@ async def login_phone(request: Request):
         phone = util.normalize_phone(raw)
     except ValueError:
         return _login_page(request, "phone", 400, phone=raw, field_err="Enter your 10-digit mobile number.")
-    p = db.one("SELECT * FROM patients WHERE phone = ?", (phone,))
-    if p is None:
-        audit.log("patient-app", "login_unknown_phone", "patient", None, {"phone": phone[-4:]})
-        return _login_page(request, "unknown", 200, phone=raw)
+    ip = security.client_ip(request)
+    hour = timedelta(hours=1)
+    if (security.hits("otp_send", ip, hour) >= OTP_MAX_PER_IP_HOUR
+            or security.hits("otp_send", "*", hour) >= OTP_MAX_GLOBAL_HOUR):
+        audit.log("patient-app", "otp_throttled", "patient", None, {"ip": ip})
+        return _login_page(request, "phone", 429, phone=raw,
+                           field_err="Too many codes asked for. Please wait an hour and try again, or ask at the front desk.")
     now = util.now()
     recent = db.scalar("SELECT COUNT(*) FROM patient_otps WHERE phone = ? AND created_at >= ?",
                        (phone, util.ts(now - timedelta(minutes=10))))
     if recent >= OTP_MAX_PER_10_MIN:
         return _login_page(request, "phone", 429, phone=raw,
                            field_err="Too many codes asked for. Please wait 10 minutes and try again.")
+    security.record("otp_send", ip)
+    security.record("otp_send", "*")
+    # Known and unknown numbers get the same page, the same limits and the same "wrong code" answers,
+    # so the login can't be used to test whether someone is a patient (S-08). For an unknown number
+    # we store a code nobody knows and send nothing.
+    p = db.one("SELECT * FROM patients WHERE phone = ?", (phone,))
     code = f"{secrets.randbelow(1_000_000):06d}"
     db.execute("INSERT INTO patient_otps(phone, code_hash, expires_at, created_at) VALUES (?,?,?,?)",
-               (phone, _otp_hash(phone, code), util.ts(now + OTP_TTL), util.ts(now)))
-    messaging.send(phone, "patient_otp",
-                   f"{code} is your {_hospital()} login code. It expires in 5 minutes. Do not share it with anyone.",
-                   patient_id=p["id"], require_consent=False, actor="patient-app")
+               (phone, _otp_hash(phone, code) if p else secrets.token_hex(32), util.ts(now + OTP_TTL), util.ts(now)))
+    if p is None:
+        audit.log("patient-app", "login_unknown_phone", "patient", None, {"phone": phone[-4:]})
+    else:
+        messaging.send(phone, "patient_otp",
+                       f"{code} is your {_hospital()} login code. It expires in 5 minutes. Do not share it with anyone.",
+                       patient_id=p["id"], require_consent=False, actor="patient-app")
     return _login_page(request, "code", phone=phone, masked=f"+91 ••••• {phone[-5:]}")
 
 
@@ -256,12 +270,12 @@ async def login_verify(request: Request):
     db.execute("UPDATE patient_otps SET used = 1 WHERE id = ?", (otp["id"],))
     p = db.one("SELECT * FROM patients WHERE phone = ?", (phone,))
     if p is None:
-        return _login_page(request, "unknown", 200, phone=phone)
+        return _login_page(request, "phone", 400, phone=phone[2:], field_err="That code has expired. Ask for a new one.")
     audit.log(_actor(p), "patient_login", "patient", p["id"])
     resp = _go("/my/")
-    token = _serializer().dumps({"p": p["id"], "c": secrets.token_urlsafe(24)})
+    token = _serializer().dumps({"p": p["id"], "v": p["session_version"], "c": secrets.token_urlsafe(24)})
     resp.set_cookie(COOKIE, token, max_age=MAX_AGE, httponly=True, samesite="lax",
-                    secure=request.url.scheme == "https", path="/")
+                    secure=security.is_https(request), path="/")
     resp.delete_cookie(PRE_COOKIE, path="/my")
     return resp
 
@@ -269,6 +283,7 @@ async def login_verify(request: Request):
 @router.post("/logout")
 async def logout(request: Request):
     p, _ = await _me_post(request)
+    db.execute("UPDATE patients SET session_version = session_version + 1 WHERE id = ?", (p["id"],))
     audit.log(_actor(p), "patient_logout", "patient", p["id"])
     resp = _go("/my/login")
     resp.delete_cookie(COOKIE, path="/")

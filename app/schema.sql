@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS patients (
   language         TEXT NOT NULL DEFAULT 'en',
   consent_messages INTEGER NOT NULL DEFAULT 0,  -- DPDP: no messages without consent
   consent_at       TEXT,
-  created_at       TEXT NOT NULL
+  created_at       TEXT NOT NULL,
+  session_version  INTEGER NOT NULL DEFAULT 0  -- patient app: bumped on logout so old cookies stop working
 );
 
 CREATE TABLE IF NOT EXISTS doctors (
@@ -187,10 +188,11 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT NOT NULL UNIQUE,
   full_name     TEXT NOT NULL,
   password_hash TEXT NOT NULL,          -- pbkdf2_sha256$iterations$salt_hex$hash_hex
-  role          TEXT NOT NULL CHECK (role IN ('admin','frontdesk','billing','doctor')),
+  role          TEXT NOT NULL CHECK (role IN ('admin','owner','frontdesk','billing','doctor')),
   branch_id     TEXT REFERENCES branches(id),   -- NULL = all branches
   active        INTEGER NOT NULL DEFAULT 1,
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  session_version INTEGER NOT NULL DEFAULT 0    -- bumped on logout, password change, deactivation: old cookies stop working
 );
 
 -- Meta retries webhooks; each WhatsApp message id is handled once.
@@ -198,3 +200,12 @@ CREATE TABLE IF NOT EXISTS processed_webhooks (
   message_id  TEXT PRIMARY KEY,
   received_at TEXT NOT NULL
 );
+
+-- Login and OTP throttling (staff login failures per username+IP, OTP sends per IP).
+CREATE TABLE IF NOT EXISTS rate_events (
+  id         INTEGER PRIMARY KEY,
+  kind       TEXT NOT NULL,             -- 'login_failed', 'otp_send'
+  key        TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events(kind, key, created_at);

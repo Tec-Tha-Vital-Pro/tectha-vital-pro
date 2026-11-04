@@ -63,6 +63,8 @@ def load() -> Settings:
         raise RuntimeError("Live WhatsApp mode needs TT_WHATSAPP_TOKEN and TT_WHATSAPP_PHONE_ID")
     if s.whatsapp_mode == "live" and not s.whatsapp_app_secret:
         raise RuntimeError("Live WhatsApp mode needs TT_WHATSAPP_APP_SECRET to verify incoming webhooks")
+    if s.whatsapp_mode == "live" and s.whatsapp_verify_token in ("", "tectha-verify"):
+        raise RuntimeError("Live WhatsApp mode needs your own TT_WHATSAPP_VERIFY_TOKEN (not the default)")
     if len(s.session_secret) < 32:
         raise RuntimeError("TT_SESSION_SECRET must be at least 32 characters")
     return s
