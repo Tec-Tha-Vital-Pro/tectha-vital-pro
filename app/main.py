@@ -11,8 +11,11 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import config, db, scheduler, security
+from app import auth, config, db, scheduler, security
 from app.routes import api, patient_app, ui, webhooks
+from app.routes import command, diagnostics as diagnostics_routes
+from app.routes import account, ai_labs, voice
+from app.routes import ai_features as ai_features_routes
 
 HERE = Path(__file__).resolve().parent
 
@@ -20,6 +23,8 @@ HERE = Path(__file__).resolve().parent
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init_db()
+    ai_features_routes.governance_ready()   # model registry rows for every AI / rules feature
+    command.add_optional_nav(_app)   # AI Labs / Account appear once their routes exist
     if config.settings.scheduler_enabled:
         scheduler.start(config.settings.scheduler_interval_seconds)
     yield
@@ -32,11 +37,19 @@ app = FastAPI(title=f"{config.PRODUCT_NAME} · {config.PRODUCT_TAGLINE}", lifesp
               docs_url="/docs" if _dev else None, redoc_url="/redoc" if _dev else None,
               openapi_url="/openapi.json" if _dev else None)
 app.add_middleware(security.SecurityHeaders)
+app.add_middleware(auth.SessionRefresh)          # idle timeout for shared terminals
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 app.include_router(ui.router)
 app.include_router(api.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/webhooks")
 app.include_router(patient_app.router, prefix="/my")
+app.include_router(diagnostics_routes.router)
+app.include_router(command.router)
+app.include_router(account.router)
+app.include_router(ai_labs.router)
+app.include_router(voice.router)
+app.include_router(ai_features_routes.router)
+ai_features_routes.install_nav()
 
 
 @app.exception_handler(StarletteHTTPException)

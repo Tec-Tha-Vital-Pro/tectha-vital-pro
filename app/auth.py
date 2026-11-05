@@ -13,6 +13,7 @@ import hmac
 import os
 import secrets
 import sys
+import time
 from datetime import timedelta
 
 from fastapi import Request
@@ -23,20 +24,31 @@ from app import audit, config, db, security, util
 COOKIE = "tt_session"
 MAX_AGE = 8 * 60 * 60
 ITERATIONS = 200_000
-ROLES = ("admin", "owner", "frontdesk", "billing", "doctor")
+ROLES = ("admin", "owner", "doctor", "nurse", "frontdesk", "billing", "lab", "pharmacy")
+ROLE_LABELS = {"admin": "Admin", "owner": "Owner", "doctor": "Doctor", "nurse": "Nurse", "frontdesk": "Front desk",
+               "billing": "Billing / insurance", "lab": "Lab / radiology", "pharmacy": "Pharmacy"}
 
 # Who may open which screen.
 ADMIN = {"admin"}
 OWNER_VIEW = {"admin", "owner"}             # dashboard and reports
 FRONT = {"admin", "frontdesk"}
-CLINICAL = {"admin", "frontdesk", "doctor"}
+CLINICAL = {"admin", "frontdesk", "doctor", "nurse"}   # appointments, patient records
 BILLING = {"admin", "billing"}              # change bills, payments, claims
 BILLING_VIEW = BILLING | {"owner"}          # read billing and claims (the owner is read-only)
-STAFF = {"admin", "owner", "frontdesk", "billing", "doctor"}
+LAB = {"admin", "lab", "doctor"}            # lab and radiology worklists
+PHARMACY = {"admin", "pharmacy"}            # dispensing and stock
+STAFF = set(ROLES)
 
 # Staff login throttling (S-07): this many failures per username + IP inside the window -> 429.
 LOGIN_MAX_FAILURES = 5
 LOGIN_WINDOW = timedelta(minutes=15)
+
+# Shared terminals: a staff session ends after this many minutes without any request (TT_STAFF_IDLE_MINUTES).
+IDLE_MINUTES = int(os.environ.get("TT_STAFF_IDLE_MINUTES", "15"))
+REFRESH_AFTER_SECONDS = 60      # how often an active session's idle clock is pushed forward
+
+# Two-step login. Pages a user may still open while their role requires 2FA they haven't set up.
+TWO_FACTOR_SETUP_PATHS = ("/account", "/logout", "/login")
 
 
 class LoginRequired(Exception):
@@ -61,6 +73,10 @@ class NotFound(Exception):
 
 class TooManyAttempts(Exception):
     pass
+
+
+class TwoFactorSetupRequired(Exception):
+    """The user's role requires two-step login and they haven't set it up yet."""
 
 
 def hash_password(password: str) -> str:
@@ -124,14 +140,72 @@ def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(config.settings.session_secret, salt="tt-session")
 
 
-def make_session(user_id: int, version: int = 0) -> str:
-    return _serializer().dumps({"u": user_id, "v": version, "c": secrets.token_urlsafe(24)})
+def _epoch() -> int:
+    return int(time.time())
 
 
-def set_session_cookie(response, request: Request, user_id: int) -> None:
+def make_session(user_id: int, version: int = 0, *, csrf: str | None = None, issued: int | None = None) -> str:
+    """Cookie payload: user, session version, CSRF token, issued-at and last-activity (for the idle timeout)."""
+    now = _epoch()
+    return _serializer().dumps({"u": user_id, "v": version, "c": csrf or secrets.token_urlsafe(24),
+                                "i": issued or now, "t": now})
+
+
+def set_session_cookie(response, request: Request, user_id: int, *, csrf: str | None = None,
+                       issued: int | None = None) -> None:
     version = db.scalar("SELECT session_version FROM users WHERE id = ?", (user_id,)) or 0
-    response.set_cookie(COOKIE, make_session(user_id, version), max_age=MAX_AGE, httponly=True, samesite="lax",
-                        secure=security.is_https(request), path="/")
+    response.set_cookie(COOKIE, make_session(user_id, version, csrf=csrf, issued=issued), max_age=MAX_AGE,
+                        httponly=True, samesite="lax", secure=security.is_https(request), path="/")
+
+
+def _session_data(request: Request) -> dict | None:
+    raw = request.cookies.get(COOKIE)
+    if not raw:
+        return None
+    try:
+        data = _serializer().loads(raw, max_age=MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return None
+    now = _epoch()
+    if now - int(data.get("i", 0)) > MAX_AGE:          # absolute limit, however active the session is
+        return None
+    if IDLE_MINUTES > 0 and now - int(data.get("t", 0)) > IDLE_MINUTES * 60:
+        return None                                    # idle too long on a shared terminal
+    return data
+
+
+class SessionRefresh:
+    """ASGI middleware: pushes an active staff session's idle clock forward (at most once a minute).
+
+    Skipped when the response sets or deletes the session cookie itself (login, logout, sign-out-others).
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope)
+        data = _session_data(request)
+        stale = data is not None and _epoch() - int(data.get("t", 0)) >= REFRESH_AFTER_SECONDS
+
+        async def wrapped_send(message):
+            if stale and message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                sets_own = any(k.lower() == b"set-cookie" and v.startswith(COOKIE.encode() + b"=") for k, v in headers)
+                if not sets_own:
+                    v = db.scalar("SELECT session_version FROM users WHERE id = ? AND active = 1", (data["u"],))
+                    if v is not None and v == data.get("v"):
+                        cookie = make_session(data["u"], v, csrf=data["c"], issued=data.get("i"))
+                        attrs = f"{COOKIE}={cookie}; Max-Age={MAX_AGE}; Path=/; HttpOnly; SameSite=lax"
+                        if security.is_https(request):
+                            attrs += "; Secure"
+                        headers.append((b"set-cookie", attrs.encode()))
+            await send(message)
+
+        await self.app(scope, receive, wrapped_send)
 
 
 def end_sessions(user_id: int) -> None:
@@ -164,25 +238,33 @@ def set_active(user_id: int, active: bool, actor: str) -> None:
 
 
 def current_user(request: Request) -> dict | None:
-    raw = request.cookies.get(COOKIE)
-    if not raw:
+    data = _session_data(request)
+    if data is None:
         return None
-    try:
-        data = _serializer().loads(raw, max_age=MAX_AGE)
-    except (BadSignature, SignatureExpired):
-        return None
-    u = db.one("SELECT id, username, full_name, role, branch_id, session_version FROM users WHERE id = ? AND active = 1",
-               (data.get("u"),))
+    u = db.one("SELECT id, username, full_name, role, branch_id, session_version, totp_enabled FROM users"
+               " WHERE id = ? AND active = 1", (data.get("u"),))
     if u is None or data.get("v") != u["session_version"]:
         return None  # deactivated, logged out, or password changed since this cookie was issued
     u["csrf"] = data["c"]
+    u["issued"] = data.get("i")
     return u
+
+
+def two_factor_required_roles() -> set[str]:
+    raw = db.get_setting("require_2fa_roles", "")
+    return {r for r in raw.split(",") if r in ROLES}
+
+
+def needs_two_factor_setup(user: dict) -> bool:
+    return user["role"] in two_factor_required_roles() and not user.get("totp_enabled")
 
 
 def require(request: Request, roles: set[str]) -> dict:
     user = current_user(request)
     if user is None:
         raise LoginRequired()
+    if needs_two_factor_setup(user) and not request.url.path.startswith(TWO_FACTOR_SETUP_PATHS):
+        raise TwoFactorSetupRequired()
     if user["role"] not in roles:
         raise Forbidden()
     return user

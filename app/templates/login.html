@@ -30,6 +30,16 @@
         <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn primary" type="submit">Log in</button>
       </form>
+      {% if demo_build() %}<p class="fine"><a href="/voice/demo">Try the AI voice assistant demo</a></p>{% endif %}
+      {% if sso %}
+      <div class="sso" aria-label="Other ways to sign in">
+        <p class="fine">or</p>
+        {% for provider, label in sso %}
+        <a class="btn" href="/login/oidc/{{ provider }}{{ ('?next=' ~ (next|urlencode)) if next }}">Sign in with {{ label }}</a>
+        {% endfor %}
+        <p class="fine">Link your {{ sso|map(attribute=1)|join(' or ') }} account on the My account page first.</p>
+      </div>
+      {% endif %}
       <p class="fine">Forgot your password? Ask the hospital's {{ product }} admin to reset it.</p>
     </div>
   </section>

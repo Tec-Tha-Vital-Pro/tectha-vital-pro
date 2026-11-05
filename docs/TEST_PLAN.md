@@ -150,3 +150,87 @@ node tests/e2e/demo_flow.js            # E2E_BASE_URL, E2E_USER, E2E_PASSWORD, E
   - Set TT_OWNER_PHONE.
   - Reseed before the meeting.
 - Live go-live still needs the security sign-off and the items in GO_LIVE.md.
+
+---
+
+# Pro (pro-foundation) — test plan and release run
+
+Owner: QA Lead. Build **8a91943**, run 05 Nov 2026 (IST). Bugs are in [BUGS_PRO.md](BUGS_PRO.md). The rules in sections 1, 6 and 7 above still apply.
+
+## P1. New risks
+
+| # | Flow | What can go wrong | Impact | Priority |
+|---|---|---|---|---|
+| R15 | Login for 8 roles, branch binding | A role can't open its own screen, or can open a screen it shouldn't | Legal (DPDP), operations | **P1** |
+| R16 | Two-step login (TOTP, recovery codes, policy), OIDC, idle timeout, sign out other devices | A code is replayed, a recovery code works twice, a role skips required 2FA, a shared terminal stays logged in | Security | **P1** |
+| R17 | Lab pipeline and critical values | A critical value is validated without a read-back call-out, is not escalated, or the wrong role enters results; a wrong reference range auto-verifies an abnormal result | **Patient harm** | **P1** |
+| R18 | Radiology and PCPNDT Form F | An obstetric scan is performed without Form F; any field for the sex of a foetus | **Legal (PCPNDT Act)** | **P1** |
+| R19 | Pharmacy FEFO and Schedule H register | Wrong batch, stock not reduced, a scheduled drug missing from the register, bill ≠ sum of items, double dispense | Legal, money | **P1** |
+| R20 | AI Labs and AI features (no-show risk, draft replies, coding, NEWS2, explainers) | AI acts without a person, a draft is sent by itself, an explainer interprets a result, NEWS2 is mis-scored | Patient harm, trust | **P1** |
+| R21 | Voice agent | Booking without consent or for an unverified number; bill amounts told to an unverified caller; emergency not caught | Legal, patient harm | **P1** |
+| R22 | Command Centre and notifications bell | Another branch's numbers shown; someone else's notification opened | Privacy | P2 |
+
+## P2. End-to-end: `tests/e2e/pro_flow.js`
+
+Plain Node and Playwright (Chromium is pre-installed; never run `playwright install`). Selectors use roles, labels and visible text. Hidden form fields are read by name only to build the negative POSTs that a browser form would never send. Steps:
+
+| Step | Checks | Risk |
+|---|---|---|
+| P00–P02 | Every role logs in and lands on its home screen with HTTP 200; 9 wrong-role screens give 403 with the access message; the nurse menu hides Command Centre and AI Labs, and the owner menu shows them | R15 |
+| P03 | Google sign-in when not configured: back to login with "not set up" | R16 |
+| P04–P06 | 2FA set-up: a wrong code is refused, a right code turns it on and shows 10 recovery codes; at login, the password alone opens nothing, a wrong code gets 401, a right code gets in, the same code is refused in a second browser (no replay); a recovery code works once | R16 |
+| P07 | Admin requires 2FA for nurses: the nurse is held at /account/2fa until the policy is cleared | R16 |
+| P08 | Idle timeout: a session idle for 16 min goes to /login, one idle for 1 min works (cookie built with the app's own signer) | R16 |
+| P09–P10 | "Sign out on every other device" ends the other browser only; a wrong current password is refused | R16 |
+| P11 | Lab: order (₹250 service, unbilled) → Collect (sample ID shown) → Receive → K 4.2 auto-verified | R17 |
+| P12–P14 | Critical K 6.8: no Validate button; a crafted validate POST is refused; a call-out without read-back is refused; an urgent task is due in 15 min; the doctor's bell shows it, opens the lab row and marks it read; someone else's notification gives 404; the call-out with read-back closes the task; then Validate works | R17, R22 |
+| P15 | Time travel +40 min: an un-called critical escalates to admin and owner, once only | R17 |
+| P16 | Reflex: TSH 8.4 adds Free T4 and waits for a pathologist | R17 |
+| P17 | Patient with no age or sex: HCT 37 must not be auto-verified on the child range | R17 |
+| P18–P19 | A branch-B order is 404 and unchanged for a branch-A lab user; pharmacy can't post results; front desk can't move a lab test | R15, R17 |
+| P20–P21 | An obstetric USG can't be performed without Form F (crafted POST refused), then works with the box ticked; an obstetric X-ray is refused; Lab / radiology staff can act on scans; front desk can't sign a report | R18 |
+| P22–P24 | The pharmacy role opens the Pharmacy counter; Dispense picks the earliest-expiry in-date batch, reduces stock by the exact quantity and writes one register row per scheduled drug; Create bill gives total = sum(items) = ₹110; a double-submitted Dispense must not also bill | R19 |
+| P25 | Command Centre: a branch-bound doctor sees only branch A; bed occupancy (65%) and beds matched to the database; wall mode loads; nurse gets 403 | R22 |
+| P26–P27 | AI Labs: agents find 16 open items and decide none; the owner sees no Accept and a crafted accept gives 403; the order stays unbilled until a person presses Accept, then lands on a bill with total = sum(items); a second accept is refused; Dismiss needs a reason | R20 |
+| P28 | No-show risk pill with reasons, labelled "decision support" | R20 |
+| P29 | Draft reply fills the box, sends 0 messages and logs one "suggested" decision; a draft for a branch-A conversation gives 404 to branch-B front desk | R20 |
+| P30 | Coding: a coder edits and saves the codes ("edited" in governance); the claim stage is unchanged; a second decision is refused; owner gets 403; another branch's claim gives 404 | R20 |
+| P31 | NEWS2: 25 / 91 / air / 90 / 131 / A / 39.5 scores exactly 14 with an emergency alert; a text SpO₂ is refused cleanly; Acknowledge closes one alert; another branch's alert gives 404 | R20 |
+| P32 | Explainers: text that interprets a result is refused; an edit goes back to Draft until approved | R20 |
+| P33–P34 | Patient OTP login (390 px); a validated K shows 4.2 and the approved explainer; an un-validated TSH value is hidden; another patient's critical result is not shown | R17, R20 |
+| P35–P36 | /my/voice: no consent gives 400, a wrong CSRF token gives 403; booking by voice makes exactly one appointment; an emergency phrase gets the 108 reply. /voice/demo typed flow: an unverified booking makes a call-back task and no appointment; no ₹ bill amount is told | R21 |
+| P37 | No HTTP 5xx and no JS errors during the run | all |
+
+Run (fresh seed and logins every time; the script changes data and turns on 2FA for `doctor`):
+
+```bash
+S=/tmp/claude-0/-home-user/5f540028-1c92-5b5c-889b-342c486a270d/scratchpad
+export TT_DB_PATH=$S/qa-pro.db TT_API_KEY=qa-key TT_SCHEDULER=off TT_OWNER_PHONE=919800000001
+rm -f $TT_DB_PATH && python3 -m app.seed
+TT_ADMIN_PASSWORD='Qa@12345' python3 -m app.auth create-admin admin "QA Admin"
+# then create, with password Qa@12345: nurse, lab, pharmacy, doctor, billing (branch A), owner (no branch),
+# frontb (frontdesk, branch B), via Settings -> Add login or app.auth.create_user
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8021 &
+node tests/e2e/pro_flow.js
+E2E_BASE_URL=http://127.0.0.1:8021 node tests/e2e/demo_flow.js   # after a second fresh seed
+```
+
+## P3. Release run, 05 Nov 2026, build 8a91943
+
+- Unit suite: **241 passed**.
+- `tests/e2e/pro_flow.js` on a fresh seed: **RESULT: 39 passed, 6 failed, 0 skipped of 45 steps.** Every failure is a product bug, not a script problem:
+  - P01 (pharmacy) and P22: BUG-P01
+  - P17: BUG-P04
+  - P19: BUG-P02
+  - P21: BUG-P03
+  - P24: BUG-P05
+- `tests/e2e/demo_flow.js` (pilot) on a second fresh seed, port 8021: **RESULT: 23 passed, 0 failed, 0 skipped of 23 steps.**
+- Exploratory pass at 390 and 1920 px: admin, lab, nurse and owner on every Pro screen. Results:
+  - No JS errors.
+  - No page-level horizontal scroll, except Appointments at 390 px (BUG-P09).
+  - Wall mode, the bell and the dialogs work at both widths.
+  - Manual probes found BUG-P06 and BUG-P07, and confirmed there is no open redirect via `next=/\…`.
+- Bugs: 0 Critical, **4 High**, 3 Medium, 2 Low.
+- **Pro demo decision: NO-GO**, until BUG-P01 to BUG-P04 are fixed and P01, P17, P19, P21 and P22 pass on a fresh seed. BUG-P05 should be fixed in the same change (P24).
+  - If the client meeting can't move, a demo driven **only by the admin login** avoids the broken role paths. It still shows BUG-P04 if a test is ordered from the dialog, so use the seeded patients only. This is a workaround for one meeting, not a release.
+- Pilot (non-Pro) demo flow is unaffected: it is still GO under the conditions in section 9.

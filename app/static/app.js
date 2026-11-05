@@ -93,6 +93,17 @@
   var thread = doc.querySelector("[data-thread]");
   if (thread) thread.scrollTop = thread.scrollHeight;
 
+  // Live screens (Command Centre): reload every N seconds while visible; pause when the tab is hidden
+  // or a dialog/menu is open, so nobody loses what they are doing.
+  var live = doc.querySelector("[data-autorefresh]");
+  if (live) {
+    var every = (parseInt(live.getAttribute("data-autorefresh"), 10) || 30) * 1000;
+    setInterval(function () {
+      if (doc.hidden || doc.querySelector("dialog[open], details.menu[open]")) return;
+      location.reload();
+    }, every);
+  }
+
   // Installable app: register the service worker (static files only).
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); });

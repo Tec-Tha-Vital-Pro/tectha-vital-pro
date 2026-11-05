@@ -59,6 +59,10 @@
     <div class="chat-empty">{{ empty('chat', 'Pick a conversation', 'Choose a patient from the list to read the thread.') }}</div>
     {% endif %}
     {% if can_reply %}
+    <form method="post" action="/messages/draft" class="draft-form">
+      {{ csrf_field(csrf) }}<input type="hidden" name="phone" value="{{ selected.phone }}">
+      <button class="btn sm" type="submit">{{ icon('spark', cls='ic xs') }} Draft reply</button>
+    </form>
     <form method="post" action="/messages/reply" class="composer reply" aria-label="Reply to {{ selected.title }}">
       {{ csrf_field(csrf) }}
       <input type="hidden" name="phone" value="{{ selected.phone }}">
@@ -67,7 +71,8 @@
       </div>
       <span class="reply-note">{% if window_open %}{{ icon('check', cls='ic xs') }} The patient wrote in the last 24 hours, so you can reply.{% else %}{{ icon('clock', cls='ic xs') }} Sent only if the patient has given WhatsApp consent.{% endif %}</span>
       <label for="r-text" class="sr-only">Your reply</label>
-      <textarea id="r-text" name="text" rows="1" maxlength="1000" placeholder="Write a reply…" required></textarea>
+      {% if draft %}<input type="hidden" name="draft_id" value="{{ draft.id }}"><span class="draft-note">{{ icon('spark', cls='ic xs') }} {{ 'AI draft' if draft.model_key == 'draft_reply_claude' else 'Template draft' }}: read and edit before you send. Nothing is sent until you press Send.</span>{% endif %}
+      <textarea id="r-text" name="text" rows="{{ 3 if draft else 1 }}" maxlength="1000" placeholder="Write a reply…" required>{{ draft.draft if draft else '' }}</textarea>
       <button class="btn primary" type="submit" aria-label="Send reply">{{ icon('send') }}</button>
     </form>
     {% endif %}

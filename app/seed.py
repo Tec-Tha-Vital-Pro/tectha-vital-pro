@@ -6,6 +6,9 @@ import random
 from datetime import datetime, timedelta
 
 from app import billing, db, util
+from app import diagnostics
+from app.agents import seed_pro as seed_pro_data
+from app.ai_features import seed_ai as seed_ai_data
 
 FIRST = ["Aarav", "Priya", "Ramesh", "Anita", "Mohammed", "Sunita", "Vikram", "Lakshmi", "Arjun", "Fatima",
          "Rahul", "Kavita", "Suresh", "Meena", "Gopal", "Neha", "Harish", "Shabana", "Deepak", "Asha",
@@ -38,6 +41,9 @@ def seed(now: datetime | None = None) -> dict:
     now = (now or util.now()).replace(microsecond=0)
     rng = random.Random(42)
     db.init_db()
+    seed_ai_data.wipe()  # AI feature tables point at beds, claims and patients: clear them first
+    diagnostics.wipe()   # Pro module tables point at core rows: clear them first
+    seed_pro_data.wipe()
     for t in WIPE:
         db.execute(f"DELETE FROM {t}")
     db.execute("INSERT INTO branches(id, name) VALUES ('A','Branch A'), ('B','Branch B') "
@@ -250,6 +256,9 @@ def seed(now: datetime | None = None) -> dict:
         "followups": db.scalar("SELECT COUNT(*) FROM followups"),
         "feedback": db.scalar("SELECT COUNT(*) FROM feedback"),
     }
+    summary.update(diagnostics.seed_diagnostics(now))
+    summary.update(seed_pro_data.seed_pro(now, rng))   # AI Labs demo data
+    summary.update(seed_ai_data.seed_ai(now))           # next AI features demo data
     return summary
 
 

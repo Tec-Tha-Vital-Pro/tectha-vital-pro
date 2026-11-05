@@ -3,7 +3,7 @@
 {% block title %}{{ order.description }}{% endblock %}
 {% block appbar %}<a class="backlink" href="/my/reports">{{ icon('back') }}<span>Reports</span></a><h1 class="appbar-title">Report</h1>{% endblock %}
 {% block content %}
-{% if results %}<div class="demo-flag" role="note">Demo · sample report</div>{% endif %}
+{% if results and not validated %}<div class="demo-flag" role="note">Demo · sample report</div>{% endif %}
 <div class="card receipt">
   <div class="receipt-head">
     <div><strong>{{ order.description }}</strong><p class="muted small">{{ order.dept }} · {{ hospital }}, {{ order.branch }}</p></div>
@@ -17,7 +17,15 @@
     {% for name, val, unit, rng in results %}<tr><td>{{ name }}</td><td class="r num"><strong>{{ val }}</strong> <span class="muted small">{{ unit }}</span></td><td class="r num muted small">{{ rng }}</td></tr>{% endfor %}
     </tbody>
   </table>
+  {% if explainer %}
+  <section class="explainer" aria-labelledby="exp-h">
+    <h2 id="exp-h" class="small">{{ 'What this test measures' if lang != 'hi' else 'यह जाँच क्या मापती है' }}</h2>
+    <p>{{ explainer }}</p>
+    <p class="muted small">{{ 'Written and approved by our doctors. It explains the test, not your own result.' if lang != 'hi' else 'हमारे डॉक्टरों द्वारा लिखा और स्वीकृत। यह जाँच के बारे में है, आपकी अपनी रिपोर्ट के बारे में नहीं।' }}</p>
+  </section>
+  {% else %}
   <p class="small muted pad-t">Please discuss your results with your doctor.</p>
+  {% endif %}
   {% else %}
   <p>Collect your report at the lab, or ask the front desk to send it to you.</p>
   {% endif %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Recovery codes{% endblock %}
+{% block content %}
+<div class="page-head"><div class="page-title"><h1>{{ 'Two-step login is on' if just_enabled else 'New recovery codes' }}</h1>
+  <p class="muted">Keep these recovery codes somewhere safe, away from your phone. Each one works once if you lose your phone. They are shown only now.</p></div></div>
+<section class="sec" aria-label="Recovery codes">
+  <ul class="codes">{% for c in codes %}<li><code>{{ c }}</code></li>{% endfor %}</ul>
+  <p><a class="btn primary" href="/account">I have saved them</a></p>
+</section>
+{% endblock %}

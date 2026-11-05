@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon, empty %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Notifications</h1>
+    <p class="muted">Critical lab values, claims past their limit and complaints, for you and your branch.</p>
+  </div>
+  {% if rows|selectattr('read_at', 'none')|list %}
+  <div class="page-actions">
+    <form method="post" action="/notifications/read-all">{{ csrf_field(csrf) }}<button class="btn" type="submit">{{ icon('check') }} Mark all as read</button></form>
+  </div>
+  {% endif %}
+</div>
+<section class="panel flush">
+  <ul class="notif-list">
+    {% for n in rows %}
+    <li class="{{ 'unread' if not n.read_at }} sev-{{ n.severity }}">
+      <form method="post" action="/notifications/{{ n.id }}/open">{{ csrf_field(csrf) }}
+        <button type="submit"><span class="sev-dot" aria-hidden="true"></span>
+          <span class="notif-t">{{ n.title }}{% if n.severity == 'critical' %}<span class="sr-only"> (critical)</span>{% endif %}</span>
+          <span class="notif-when num">{{ n.created_at[8:10] }}/{{ n.created_at[5:7] }} {{ n.created_at[11:16] }}</span>
+          <span class="notif-go">Open ›</span></button>
+      </form>
+    </li>
+    {% else %}
+    <li>{{ empty('bell', 'You are all caught up', 'Critical lab values, claims past their limit and new complaints will appear here.') }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

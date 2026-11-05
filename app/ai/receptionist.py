@@ -200,21 +200,34 @@ def _book(ctx: dict, out: ReceptionistOutput, doc: dict, now: datetime) -> dict:
     return {"booked": True, "appointment_id": aid, "token": token, "patient_id": p["id"], "starts": starts}
 
 
-def respond(phone: str, text: str, now: datetime, client=None, *, inbound_id: int | None = None) -> dict:
-    """Answer one inbound WhatsApp message with AI. Sends the reply and creates staff tasks."""
+def respond(phone: str, text: str, now: datetime, client=None, *, inbound_id: int | None = None,
+            channel: str = "whatsapp", verified: bool = True, history: list[dict] | None = None) -> dict:
+    """Answer one patient message with AI and create staff tasks.
+
+    channel "whatsapp": stores the inbound message and sends the reply on WhatsApp.
+    channel "voice": the caller (voice assistant) stores the conversation and speaks result["reply"].
+    verified=False (a number typed on a public page, not proven): the model sees no patient record and
+    nothing is booked under that number; booking requests become a call-back task instead.
+    """
     ctx = build_context(phone, now)
+    if history is not None:
+        ctx["history"] = history
+    if not verified:
+        ctx["patient"], ctx["record"] = None, {}
     p = ctx["patient"]
     pid = p["id"] if p else None
-    if inbound_id is None:   # called directly (not from the webhook): store the inbound message first
+    where = "WhatsApp" if channel == "whatsapp" else "the voice assistant"
+    if channel == "whatsapp" and inbound_id is None:   # called directly (not from the webhook): store it first
         inbound_id = messaging.record_inbound(ctx["phone"], text, pid)
     rel_id = inbound_id
+    rel_type = "message" if channel == "whatsapp" else "voice"
     try:
         out = ask_model(ctx, text, client=client)
         reply, notes = safe_reply(out)
     except ai.AIError as e:
         audit.log("ai", "ai_error", "message", inbound_id, {"error": str(e), "prompt": prompts.RECEPTIONIST_VERSION})
-        _task("followup_call", f"AI could not answer — reply manually to +{ctx['phone']}: {text[:60]}", None,
-              "message", rel_id, now + timedelta(minutes=15), now)
+        _task("followup_call", f"AI could not answer on {where} — reply manually to +{ctx['phone']}: {text[:60]}", None,
+              rel_type, rel_id, now + timedelta(minutes=15), now)
         return {"action": "ai_error", "error": str(e)}
 
     result = {"action": "ai_reply", "intent": out.intent, "urgency": out.urgency, "language": out.language, "notes": notes}
@@ -222,14 +235,19 @@ def respond(phone: str, text: str, now: datetime, client=None, *, inbound_id: in
         audit.log("ai", "ai_" + n, "message", inbound_id)
 
     if out.intent == "emergency" or out.urgency == "emergency":
-        _task("followup_call", f"URGENT: possible emergency on WhatsApp from +{ctx['phone']}: {text[:60]}", None,
-              "message", rel_id, now, now)
+        _task("followup_call", f"URGENT: possible emergency on {where} from +{ctx['phone']}: {text[:60]}", None,
+              rel_type, rel_id, now, now)
         audit.log("ai", "emergency_flagged", "message", inbound_id, {"phone": ctx["phone"]})
         result["task"] = "urgent"
     elif out.intent == "complaint":
-        _task("complaint", f"Complaint on WhatsApp from +{ctx['phone']}: {text[:60]}", None, "message", rel_id,
+        _task("complaint", f"Complaint on {where} from +{ctx['phone']}: {text[:60]}", None, rel_type, rel_id,
               now + timedelta(hours=4), now)
         result["task"] = "complaint"
+    elif out.intent == "book_appointment" and out.patient_confirmed and not verified:
+        _task("followup_call", f"Booking request on {where} from +{ctx['phone']} (number not verified): {text[:60]}",
+              None, rel_type, rel_id, now + timedelta(minutes=30), now)
+        reply = "Thank you. Our team will call you on this number to confirm the booking."
+        result["task"] = "followup_call"
     elif out.intent == "book_appointment" and out.patient_confirmed and (out.doctor_id is not None or out.slot is not None):
         v = validate(out, ctx)
         if v["ok"]:
@@ -249,16 +267,18 @@ def respond(phone: str, text: str, now: datetime, client=None, *, inbound_id: in
             reply = _slot_unavailable_reply(v["doctor"], ctx) if v["doctor"] else \
                 "Sorry, I couldn't find that doctor. Our team will call you to help with the booking."
             if not v["doctor"]:
-                _task("followup_call", f"Help +{ctx['phone']} book an appointment", None, "message", rel_id,
+                _task("followup_call", f"Help +{ctx['phone']} book an appointment", None, rel_type, rel_id,
                       now + timedelta(minutes=30), now)
             result["booking_rejected"] = v["problems"]
     if out.needs_human or out.intent in ("reschedule", "cancel"):
-        _task("followup_call", f"WhatsApp needs staff ({out.intent}) from +{ctx['phone']}: {text[:60]}", None,
-              "message", rel_id, now + timedelta(minutes=30), now)
+        _task("followup_call", f"{where[0].upper() + where[1:]} needs staff ({out.intent}) from +{ctx['phone']}: {text[:60]}",
+              None, rel_type, rel_id, now + timedelta(minutes=30), now)
         result.setdefault("task", "followup_call")
 
-    mid = messaging.send(ctx["phone"], "ai_reply", reply, patient_id=pid, require_consent=False, actor="ai")
-    result["message_id"] = mid
+    result["reply"] = reply
+    if channel == "whatsapp":
+        mid = messaging.send(ctx["phone"], "ai_reply", reply, patient_id=pid, require_consent=False, actor="ai")
+        result["message_id"] = mid
     return result
 
 

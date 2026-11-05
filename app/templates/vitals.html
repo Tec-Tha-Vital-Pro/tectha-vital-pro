@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon, empty %}
+{% block title %}Vitals & NEWS2{% endblock %}
+{% block content %}
+{% macro n2(score) -%}
+{%- if score is none %}<span class="muted small">No vitals yet</span>
+{%- else %}{% set band = 0 if score == 0 else (1 if score <= 4 else (2 if score <= 6 else 3)) %}<span class="n2 n2-{{ band }}">{{ score }}</span>{% endif -%}
+{%- endmacro %}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Vitals &amp; NEWS2</h1>
+    <p class="muted">{{ label }} Urgent review from {{ th.news2_urgent }} (or any single parameter at 3), emergency from {{ th.news2_emergency }}, and an alert when the score rises by {{ th.news2_rise }} or more.</p>
+  </div>
+</div>
+
+{% if alerts %}
+<section class="sec" aria-labelledby="n2-alerts">
+  <div class="sec-head"><h2 id="n2-alerts"><span class="h-ic">{{ icon('alert') }}</span>Open alerts <span class="count-badge num">{{ alerts|length }}</span></h2></div>
+  {% for a in alerts %}
+  <div class="n2-alert lv-{{ a.level }}" id="alert-{{ a.id }}">
+    <div><strong>{{ a.name }}</strong> <span class="uid-sm">{{ a.uid }}</span> · {{ n2(a.score) }} <span class="small">{{ a.level|capitalize }}: {{ a.reason }}</span>
+      <span class="muted small num"> · {{ a.created_at[11:16] }}{% if a.escalated_at %} · escalated to admins{% endif %}</span></div>
+    <form method="post" action="/vitals/alerts/{{ a.id }}/ack">{{ csrf_field(csrf) }}<button class="btn sm primary" type="submit">Acknowledge</button></form>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="sec" aria-labelledby="n2-beds">
+  <div class="sec-head"><h2 id="n2-beds"><span class="h-ic">{{ icon('bed') }}</span>Inpatients</h2></div>
+  {% if beds %}
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Bed</th><th>Patient</th><th>Latest NEWS2</th><th>Trend</th><th>Recorded</th></tr></thead>
+    <tbody>
+    {% for b in beds %}
+    <tr><td data-label="Bed">{{ b.ward }} · {{ b.bed }}{% if not user.branch_id %} <span class="branch-code">{{ b.branch_id }}</span>{% endif %}</td>
+      <td data-label="Patient"><strong>{{ b.name }}</strong> <span class="uid-sm">{{ b.uid }}</span></td>
+      <td data-label="NEWS2">{{ n2(b.news2) }}</td>
+      <td data-label="Trend" class="num">{% if b.trend is none %}—{% elif b.trend > 0 %}<span class="bad-text">↑ {{ b.trend }}</span>{% elif b.trend < 0 %}↓ {{ -b.trend }}{% else %}→ 0{% endif %}</td>
+      <td data-label="Recorded" class="num small">{{ b.recorded_at[8:10] ~ '/' ~ b.recorded_at[5:7] ~ ' ' ~ b.recorded_at[11:16] if b.recorded_at else '—' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}{{ empty('bed', 'No inpatients', 'Patients appear here when a bed is marked occupied.') }}{% endif %}
+</section>
+
+{% if beds %}
+<section class="sec panel" aria-labelledby="n2-new">
+  <div class="sec-head"><h2 id="n2-new">Record vitals</h2></div>
+  <form method="post" action="/vitals">
+    {{ csrf_field(csrf) }}
+    <div class="vitals-grid">
+      <label for="v-p">Patient<select id="v-p" name="patient_id" required>{% for b in beds %}<option value="{{ b.patient_id }}">{{ b.name }} · {{ b.ward }} {{ b.bed }}</option>{% endfor %}</select></label>
+      <label for="v-rr">Respiration /min<input id="v-rr" name="resp_rate" inputmode="numeric" pattern="[0-9]*" required></label>
+      <label for="v-sp">SpO₂ %<input id="v-sp" name="spo2" inputmode="numeric" pattern="[0-9]*" required></label>
+      <label for="v-o2">Air or oxygen<select id="v-o2" name="on_oxygen"><option value="">Air</option><option value="1">Oxygen</option></select></label>
+      <label for="v-bp">Systolic BP mmHg<input id="v-bp" name="systolic_bp" inputmode="numeric" pattern="[0-9]*" required></label>
+      <label for="v-hr">Pulse /min<input id="v-hr" name="pulse" inputmode="numeric" pattern="[0-9]*" required></label>
+      <label for="v-c">Consciousness (ACVPU)<select id="v-c" name="consciousness"><option value="A">A · Alert</option><option value="C">C · New confusion</option><option value="V">V · Voice</option><option value="P">P · Pain</option><option value="U">U · Unresponsive</option></select></label>
+      <label for="v-t">Temperature °C<input id="v-t" name="temperature" inputmode="decimal" required></label>
+    </div>
+    <p class="pad-t"><button class="btn primary" type="submit">Save and score</button></p>
+  </form>
+</section>
+{% endif %}
+
+{% if can_tune %}
+<section class="sec panel" aria-labelledby="n2-th">
+  <div class="sec-head"><h2 id="n2-th">Thresholds (ICU team)</h2></div>
+  <form method="post" action="/vitals/thresholds" class="vitals-grid">
+    {{ csrf_field(csrf) }}
+    <label for="t-u">Urgent review from<input id="t-u" name="news2_urgent" value="{{ th.news2_urgent }}" inputmode="numeric"></label>
+    <label for="t-e">Emergency from<input id="t-e" name="news2_emergency" value="{{ th.news2_emergency }}" inputmode="numeric"></label>
+    <label for="t-r">Alert on a rise of<input id="t-r" name="news2_rise" value="{{ th.news2_rise }}" inputmode="numeric"></label>
+    <label for="t-m">Escalate after (minutes)<input id="t-m" name="news2_escalate_minutes" value="{{ th.news2_escalate_minutes }}" inputmode="numeric"></label>
+    <p><button class="btn" type="submit">Save thresholds</button></p>
+  </form>
+  <p class="muted small">Published NEWS2 bands are 5–6 for urgent review and 7 or more for emergency response. Change them only with the ICU team's agreement.</p>
+</section>
+{% endif %}
+{% endblock %}

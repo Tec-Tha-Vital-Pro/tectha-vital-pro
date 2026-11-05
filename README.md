@@ -19,7 +19,7 @@ It does not replace the hospital's software. It reads from it (CSV export or API
 
 ## Run it on a laptop (free)
 
-Needs Python 3.11 or newer.
+Needs Python 3.10 or newer.
 
 ```bash
 pip install -r requirements.txt

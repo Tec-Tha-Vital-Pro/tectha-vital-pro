@@ -58,6 +58,8 @@ NAV = [
     ("/import", "Import", ADMIN, "Admin", "upload"),
     ("/settings", "Settings", ADMIN, "Admin", "settings"),
     ("/audit", "Audit log", ADMIN, "Admin", "audit"),
+    ("/ai-labs", "AI Labs", OWNER_VIEW, "Intelligence", "spark"),
+    ("/account", "My account", STAFF, "Account", "users"),
 ]
 # Bottom tab bar on phones: the most used screens per role (the rest go under "More").
 TABS = {
@@ -66,9 +68,13 @@ TABS = {
     "frontdesk": ["/leads", "/appointments", "/messages", "/tasks"],
     "billing": ["/billing", "/claims", "/tasks"],
     "doctor": ["/appointments", "/patients"],
+    "nurse": ["/appointments", "/patients", "/tasks"],
+    "lab": ["/tasks", "/account"],
+    "pharmacy": ["/tasks", "/account"],
 }
 BRANCH_AWARE = {"/", "/leads", "/appointments", "/billing", "/claims", "/tasks"}
-HOME = {"admin": "/", "owner": "/", "frontdesk": "/leads", "billing": "/billing", "doctor": "/appointments"}
+HOME = {"admin": "/", "owner": "/", "frontdesk": "/leads", "billing": "/billing", "doctor": "/appointments",
+        "nurse": "/appointments", "lab": "/tasks", "pharmacy": "/tasks"}
 
 
 class UIRoute(APIRoute):
@@ -83,6 +89,8 @@ class UIRoute(APIRoute):
             except auth.LoginRequired:
                 nxt = request.url.path
                 return RedirectResponse("/login" + (f"?next={quote(nxt)}" if nxt != "/" else ""), status_code=303)
+            except auth.TwoFactorSetupRequired:
+                return back("/account/2fa", err="Your role needs two-step login. Set it up to continue.")
             except auth.Forbidden:
                 return _error(request, 403, "You don't have access to this screen",
                               "Ask an admin to change your role if you need it.")
@@ -142,6 +150,9 @@ def render(request: Request, name: str, user: dict | None, status_code: int = 20
     base["undo"] = ok.get("u") if ok else None
     base["err"] = bad["t"] if bad else None
     base.update(ctx)
+    if name == "login.html" and "sso" not in base:
+        from app import oidc
+        base["sso"] = [(p, oidc.LABELS[p]) for p in oidc.enabled_providers()]
     return TEMPLATES.TemplateResponse(request, name, base, status_code=status_code)
 
 
@@ -277,7 +288,9 @@ def _message_scope(user: dict, alias: str = "m") -> tuple[str, tuple]:
 
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    return render(request, "login.html", None, next=request.query_params.get("next", ""))
+    from app import oidc
+    return render(request, "login.html", None, next=request.query_params.get("next", ""),
+                  sso=[(p, oidc.LABELS[p]) for p in oidc.enabled_providers()])
 
 
 @router.post("/login")
@@ -291,8 +304,19 @@ def login(request: Request, username: str = Form(""), password: str = Form(""), 
     if u is None:
         return render(request, "login.html", None, status_code=401, next=next, username=username,
                       login_error="Wrong username or password.")
-    dest = next if next.startswith("/") and not next.startswith("//") else HOME[u["role"]]
-    resp = RedirectResponse(dest, status_code=303)
+    return finish_login(request, u, next)
+
+
+def safe_next(next: str, role: str) -> str:
+    return next if next.startswith("/") and not next.startswith("//") else HOME[role]
+
+
+def finish_login(request: Request, u: dict, next: str) -> RedirectResponse:
+    """Password (or Google/Microsoft) checked: ask for the authenticator code if two-step login is on."""
+    from app.routes import account
+    if u.get("totp_enabled"):
+        return account.start_second_step(request, u, next)
+    resp = RedirectResponse(safe_next(next, u["role"]), status_code=303)
     auth.set_session_cookie(resp, request, u["id"])
     return resp
 
@@ -467,6 +491,8 @@ def _appointments_view(request: Request, user: dict, d: date, br: str | None, sh
             groups.append({"branch": doc["branch_name"], "doctors": []})
         groups[-1]["doctors"].append(doc)
     now = util.now()
+    from app.ai_features import noshow
+    noshow.annotate(shown, now)   # rules-based no-show risk with reasons (decision support)
     ctx = {"rows": shown, "counts": counts, "show": show, "filters": APPT_FILTERS, "labels": APPT_LABELS,
            "day": d, "doctor_groups": groups, "f_branch": br or "", "multi_branch": not br and len(_branches()) > 1,
            "prev": (d - timedelta(days=1)).isoformat(), "next_day": (d + timedelta(days=1)).isoformat(),
@@ -749,6 +775,10 @@ def claims_page(request: Request, branch: str = ""):
         # Past the limit is worked out from time in stage, never from whether a task exists (M9).
         r["stuck"] = bool(limit and mins > limit)
         r["over"] = _dur(mins - limit) if r["stuck"] else ""
+    from app.ai_features import coding
+    codes = coding.latest_for_claims([r["id"] for r in rows])
+    for r in rows:
+        r["coding"] = codes.get(r["id"])
     cols = [{"key": k, "label": lbl, "cards": [r for r in rows if r["stage"] == k]} for k, lbl in CLAIM_STAGES]
     return render(request, "claims.html", user, cols=cols, stages=CLAIM_STAGES, f_branch=br or "",
                   readonly=user["role"] not in BILLING)
@@ -823,7 +853,7 @@ async def task_reopen(request: Request, task_id: int):
 # ---------------------------------------------------------------- messages
 
 @router.get("/messages", response_class=HTMLResponse)
-def messages_page(request: Request, phone: str = "", q: str = ""):
+def messages_page(request: Request, phone: str = "", q: str = "", draft: str = ""):
     user = auth.require(request, FRONT)
     scope_sql, scope_params = _message_scope(user)
     rows = db.query("SELECT m.*, p.name, p.uid, p.id AS pid FROM messages m LEFT JOIN patients p ON p.id=m.patient_id"
@@ -855,7 +885,12 @@ def messages_page(request: Request, phone: str = "", q: str = ""):
         thread = db.query(f"SELECT * FROM messages m WHERE m.to_phone = ?{scope_sql} ORDER BY m.id DESC LIMIT 200",
                           (selected["phone"], *scope_params))[::-1]
     can_reply = bool(selected and selected["title"] != "Owner's daily report")
+    draft_row = None
+    if draft.isdigit() and selected:
+        draft_row = db.one("SELECT * FROM draft_replies WHERE id = ? AND phone = ? AND status = 'Proposed'",
+                           (int(draft), selected["phone"]))
     return render(request, "messages.html", user, convs=conv_list, selected=selected, thread=thread, phone=phone, q=q,
+                  draft=draft_row,
                   simulator=config.settings.whatsapp_mode == "simulator", can_reply=can_reply,
                   window_open=bool(selected and _patient_wrote_within_24h(selected["phone"])),
                   quick_replies=QUICK_REPLIES)
@@ -872,7 +907,7 @@ def _patient_wrote_within_24h(phone: str) -> bool:
 
 
 @router.post("/messages/reply")
-async def messages_reply(request: Request, phone: str = Form(""), text: str = Form("")):
+async def messages_reply(request: Request, phone: str = Form(""), text: str = Form(""), draft_id: str = Form("")):
     """A staff member answers a patient on WhatsApp.
 
     Consent rule: a reply within 24 hours of the patient's own message answers a conversation the
@@ -903,6 +938,9 @@ async def messages_reply(request: Request, phone: str = Form(""), text: str = Fo
             messaging.send(digits, "staff_reply", text, patient_id=pt["id"], actor=auth.actor(user))
     except messaging.SendBlocked:
         return back(dest, err="Not sent: this patient has not given WhatsApp consent. Record consent on their profile first.")
+    if draft_id.isdigit():
+        from app.ai_features import drafts
+        drafts.record_sent(int(draft_id), text, auth.actor(user))   # logs whether staff sent the draft as-is or edited it
     now = util.now()
     for lead in db.query("SELECT * FROM leads WHERE phone = ? AND status = 'New'", (digits,)):
         if user["branch_id"] and lead["branch_id"] not in (None, user["branch_id"]):

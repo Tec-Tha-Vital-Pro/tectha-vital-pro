@@ -1,0 +1,32 @@
+{# Shared voice panel. Needs: mode ('patient'|'demo'), token (CSRF), langs, consent_text. #}
+<section class="voice" id="voice" data-mode="{{ mode }}" data-csrf="{{ token }}" aria-labelledby="v-title">
+  <h1 id="v-title">Talk to {{ hospital }}</h1>
+  <p class="muted">Ask to book an appointment, for OPD timings and fees{% if mode == 'patient' %}, or your bill balance{% endif %}. For an emergency, call <strong>108</strong>.</p>
+
+  <form class="voice-start stack" id="v-start">
+    <label for="v-lang">Language
+      <select id="v-lang" name="lang">
+        {% for code, label in [('en-IN','English'),('hi-IN','हिन्दी'),('ta-IN','தமிழ்'),('te-IN','తెలుగు'),('kn-IN','ಕನ್ನಡ'),('ml-IN','മലയാളം'),('mr-IN','मराठी')] %}
+        <option value="{{ code }}">{{ label }}</option>{% endfor %}
+      </select></label>
+    {% if mode == 'demo' %}
+    <label for="v-phone">Your mobile number<input id="v-phone" name="phone" inputmode="numeric" autocomplete="tel" pattern="[0-9 +]{10,15}" maxlength="15" placeholder="98765 43210" required></label>
+    {% endif %}
+    <label class="check" for="v-consent"><input id="v-consent" type="checkbox" required> I agree. {{ consent_text }}</label>
+    <button class="btn primary" type="submit">Start</button>
+  </form>
+
+  <div class="voice-chat" id="v-chat" hidden>
+    <ol class="voice-log" id="v-log" aria-live="polite"></ol>
+    <p class="muted small" id="v-support" hidden>Your browser can't listen to speech, so please type instead. Chrome or Edge on a phone or computer supports speaking.</p>
+    <form class="voice-input" id="v-form">
+      <button class="btn mic" type="button" id="v-mic" aria-pressed="false" aria-label="Speak">Speak</button>
+      <label class="visually-hidden" for="v-text">Or type your message</label>
+      <input id="v-text" name="text" maxlength="500" placeholder="Or type here" autocomplete="off">
+      <button class="btn" type="submit">Send</button>
+    </form>
+    <p class="muted small">Answers are general help from the hospital's assistant, not medical advice. A doctor decides about your care.</p>
+  </div>
+  <p class="err-box" id="v-error" role="alert" hidden></p>
+</section>
+<script src="/static/voice.js" defer></script>

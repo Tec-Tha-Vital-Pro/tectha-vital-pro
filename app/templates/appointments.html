@@ -42,7 +42,9 @@
       <td class="small c-rem" data-label="Reminders">
         <span class="rem {{ 'on' if a.reminder_24h_sent_at }}" title="{{ ('Sent ' ~ a.reminder_24h_sent_at[8:10] ~ '/' ~ a.reminder_24h_sent_at[5:7] ~ ' ' ~ a.reminder_24h_sent_at[11:16]) if a.reminder_24h_sent_at else 'Not sent yet' }}">{{ '✓' if a.reminder_24h_sent_at else '○' }} 24 h</span><span class="rem {{ 'on' if a.reminder_2h_sent_at }}" title="{{ ('Sent ' ~ a.reminder_2h_sent_at[11:16]) if a.reminder_2h_sent_at else 'Not sent yet' }}">{{ '✓' if a.reminder_2h_sent_at else '○' }} 2 h</span>
       </td>
-      <td class="c-status" data-label="Status">{{ appt_pill(a.status) }}</td>
+      <td class="c-status" data-label="Status">{{ appt_pill(a.status) }}{% if a.risk_level in ('high', 'medium') %}
+        <span class="risk risk-{{ a.risk_level }}" tabindex="0" title="No-show risk {{ a.risk }}/100 (rules-based decision support): {{ a.risk_reasons|join('; ') }}" aria-label="No-show risk {{ a.risk_level }}, {{ a.risk }} out of 100. Reasons: {{ a.risk_reasons|join('; ') }}">{{ '▲' if a.risk_level == 'high' else '△' }} {{ 'High' if a.risk_level == 'high' else 'Some' }} no-show risk</span>
+        <span class="risk-why">{{ a.risk_reasons|join(' · ') }}</span>{% endif %}</td>
       <td class="actions r c-actions" data-label="">
         {% if a.status in ('Booked', 'Confirmed') %}
         <form method="post" action="/appointments/{{ a.id }}/status">{{ csrf_field(csrf) }}<input type="hidden" name="status" value="Visited"><button class="btn sm primary" type="submit">Seen</button></form>
