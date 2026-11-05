@@ -29,7 +29,7 @@ LANG_COOKIE = "tt_lang"
 # the pilot; never machine-translated. Strings not listed stay in English.
 STRINGS = {
     "en": {
-        "tab_home": "Home", "tab_book": "Book", "tab_bills": "Bills", "tab_reports": "Reports", "tab_profile": "Profile",
+        "voice_link": "Speak to us", "tab_home": "Home", "tab_book": "Book", "tab_bills": "Bills", "tab_reports": "Reports", "tab_profile": "Profile",
         "tagline": "Book visits, see reports and pay bills from your phone.",
         "mobile_number": "Mobile number", "get_code": "Get code on WhatsApp",
         "use_number": "Use the number you gave at the hospital.",
@@ -49,7 +49,7 @@ STRINGS = {
         "language": "Language", "log_out": "Log out",
     },
     "hi": {
-        "tab_home": "होम", "tab_book": "बुक करें", "tab_bills": "बिल", "tab_reports": "रिपोर्ट", "tab_profile": "प्रोफ़ाइल",
+        "voice_link": "बोलकर पूछें", "tab_home": "होम", "tab_book": "बुक करें", "tab_bills": "बिल", "tab_reports": "रिपोर्ट", "tab_profile": "प्रोफ़ाइल",
         "tagline": "अपने फ़ोन से डॉक्टर से मिलने का समय लें, रिपोर्ट देखें और बिल भरें।",
         "mobile_number": "मोबाइल नंबर", "get_code": "WhatsApp पर कोड पाएं",
         "use_number": "वही नंबर डालें जो आपने अस्पताल में दिया था।",
@@ -657,7 +657,14 @@ def report_detail(request: Request, order_id: int):
     lab = diagnostics.patient_results(order_id)   # Pro: real results, only once validated
     if lab is not None:
         state, rows = lab
-        return _page(request, "patient/report.html", p, order=o, results=rows if state == "validated" else None)
+        explainer = None
+        if state == "validated":
+            # Doctor-approved text about what the test measures; never about the patient's own value.
+            from app.ai_features import explainers
+            code = db.scalar("SELECT test_code FROM lab_orders WHERE order_id = ?", (order_id,))
+            explainer = explainers.for_patient(code, _lang(request)) if code else None
+        return _page(request, "patient/report.html", p, order=o, results=rows if state == "validated" else None,
+                     validated=state == "validated", explainer=explainer)
     return _page(request, "patient/report.html", p, order=o, results=SAMPLE_RESULTS if demo_mode() else None)
 
 

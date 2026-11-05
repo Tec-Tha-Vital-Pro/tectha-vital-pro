@@ -30,6 +30,7 @@
         <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn primary" type="submit">Log in</button>
       </form>
+      {% if demo_build() %}<p class="fine"><a href="/voice/demo">Try the AI voice assistant demo</a></p>{% endif %}
       {% if sso %}
       <div class="sso" aria-label="Other ways to sign in">
         <p class="fine">or</p>

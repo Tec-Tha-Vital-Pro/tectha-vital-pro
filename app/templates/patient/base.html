@@ -26,6 +26,7 @@
     {% block appbar %}
     <a class="brand" href="/my/"><span class="mark" aria-hidden="true">{{ hospital[:1] }}</span><span><strong>{{ hospital }}</strong><small>{{ product }}</small></span></a>
     {% endblock %}
+    {% if me %}<a class="voice-link" href="/my/voice" {% if path.startswith('/my/voice') %}aria-current="page"{% endif %}>{{ t('voice_link') }}</a>{% endif %}
   </div>
 </header>
 <main class="screen" id="main">

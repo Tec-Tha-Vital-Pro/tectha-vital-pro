@@ -162,7 +162,7 @@ def test_daily_owner_report_once_after_9(fresh_db, monkeypatch):
 def test_run_all_and_scheduler_tick(fresh_db):
     r = automations.run_all(NOW)
     assert set(r) == {"appointment_reminders", "feedback_requests", "dues_reminders", "followup_reminders",
-                      "detect_unbilled", "detect_stuck_claims", "daily_owner_report", "diagnostics_sweep"}
+                      "detect_unbilled", "detect_stuck_claims", "daily_owner_report", "diagnostics_sweep", "news2_escalation"}
     assert scheduler.tick() is not None
 
 

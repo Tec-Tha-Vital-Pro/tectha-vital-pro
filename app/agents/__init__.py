@@ -120,4 +120,4 @@ def run_due(now: datetime) -> dict:
 
 
 # Import the agents so they register themselves.
-from app.agents import claims_docs, followup_churn, owner_briefing, revenue_loss, stock_expiry  # noqa: E402,F401
+from app.agents import claims_docs, followup_churn, noshow_risk, owner_briefing, revenue_loss, stock_expiry  # noqa: E402,F401

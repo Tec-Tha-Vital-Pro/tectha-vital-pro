@@ -63,7 +63,7 @@ def test_totp_matches_rfc6238_vector():
     assert twofactor.totp(secret, at=1111111109) == "081804"
 
 
-@pytest.mark.parametrize("role,home", [("nurse", "/appointments"), ("lab", "/tasks"), ("pharmacy", "/tasks")])
+@pytest.mark.parametrize("role,home", [("nurse", "/appointments"), ("lab", "/diagnostics"), ("pharmacy", "/diagnostics")])
 def test_new_roles_log_in_to_their_home(client, role, home):
     r = _login(client, f"u{role}", role)
     assert r.status_code == 303 and r.headers["location"] == home

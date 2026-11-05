@@ -895,3 +895,28 @@ body.wall-mode h1{font-size:2rem}
   .bell-menu .menu-pop{position:fixed;left:16px;right:16px;top:calc(var(--top-h) + 8px);width:auto}
 }
 @media (pointer:coarse){.result-form input{min-height:44px}}
+
+/* ---- Pro AI features: no-show risk, drafts, coding, NEWS2 ---- */
+.risk{display:inline-flex;align-items:center;gap:4px;margin-inline-start:6px;padding:2px 8px;border-radius:999px;font-size:.74rem;font-weight:600;white-space:nowrap}
+.risk-high{background:#FDECEC;color:#A12A2A}
+.risk-medium{background:#FFF4E0;color:#8A5A00}
+.risk-why{display:block;margin-top:2px;font-size:.72rem;color:var(--muted,#6B7280);max-width:28ch}
+.draft-form{display:flex;justify-content:flex-end;padding:6px 12px 0}
+.draft-note{display:block;font-size:.78rem;color:#6D3FBF;margin:2px 0 4px}
+.codes{margin:6px 0 0}
+.codes-box{margin-top:6px;border:1px solid #E5E1F3;border-radius:8px;padding:6px 8px;background:#FAF8FF}
+.codes-box summary{cursor:pointer;color:#6D3FBF}
+.codes-box .row-form{display:flex;flex-wrap:wrap;gap:6px}
+.codes-box .row-form input{flex:1 1 100%;min-width:0;width:100%}
+.codes-list{margin:6px 0;padding-inline-start:16px;font-size:.8rem}
+.codes-list .evid{display:block;color:var(--muted,#6B7280);font-style:italic}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.n2{display:inline-flex;align-items:center;justify-content:center;min-width:2.2em;padding:2px 8px;border-radius:999px;font-weight:700;font-variant-numeric:tabular-nums}
+.n2-0{background:#E9F7EF;color:#1F6B44}.n2-1{background:#FFF4E0;color:#8A5A00}.n2-2{background:#FDECEC;color:#A12A2A}.n2-3{background:#A12A2A;color:#fff}
+.n2-alert{border:1px solid #F2C9C9;border-radius:10px;padding:10px 12px;margin:0 0 8px;background:#FFF8F8;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.n2-alert.lv-rise{background:#FFFBF2;border-color:#F3DEB0}
+.vitals-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.vitals-grid label{display:flex;flex-direction:column;gap:4px;font-size:.8rem}
+.vitals-grid input,.vitals-grid select{min-height:44px}
+:root[data-theme="dark"] .codes-box{background:#1d1a26;border-color:#3a3350}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .codes-box{background:#1d1a26;border-color:#3a3350}}

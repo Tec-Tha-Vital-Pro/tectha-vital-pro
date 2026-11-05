@@ -17,6 +17,14 @@
   </div>
 </div>
 
+{% if news2_alerts %}
+<section class="cc-alerts" aria-label="NEWS2 early-warning alerts">
+  {% for a in news2_alerts %}
+  <a class="cc-alert" href="/vitals#alert-{{ a.id }}">{{ icon('heart', cls='ic xs') }} <strong>NEWS2 {{ a.score }}</strong> · {{ a.name }} · {{ a.level }} · {{ a.reason }}</a>
+  {% endfor %}
+  <p class="muted small">Rules-based published score, not a diagnosis.</p>
+</section>
+{% endif %}
 {% if alerts %}
 <section class="cc-alerts" aria-label="Critical values waiting for a call-out">
   {% for a in alerts %}

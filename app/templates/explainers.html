@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf_field, icon %}
+{% block title %}Report explainers{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-title">
+    <h1>Report explainers</h1>
+    <p class="muted">Plain-language text patients see on a validated lab report. It explains what the test measures, never the patient's own result, and every edit needs a doctor's approval before patients see it.</p>
+  </div>
+</div>
+{% for it in items %}
+<section class="sec panel" aria-labelledby="ex-{{ it.code }}">
+  <div class="sec-head"><h2 id="ex-{{ it.code }}">{{ it.name }} <span class="uid-sm">{{ it.code }}</span></h2></div>
+  <div class="vitals-grid">
+  {% for lang, lbl in [('en', 'English'), ('hi', 'हिन्दी')] %}
+    {% set row = it[lang] %}
+    <form method="post" action="/explainers">
+      {{ csrf_field(csrf) }}<input type="hidden" name="test_code" value="{{ it.code }}"><input type="hidden" name="lang" value="{{ lang }}">
+      <label for="ex-{{ it.code }}-{{ lang }}">{{ lbl }}
+        {% if row %}<span class="pill {{ 'p-ok' if row.status == 'Approved' else 'p-warn' }}">{{ '✓ Approved' if row.status == 'Approved' else '● Draft' }}</span>{% else %}<span class="pill">○ Not written</span>{% endif %}
+      </label>
+      <textarea id="ex-{{ it.code }}-{{ lang }}" name="body" rows="3" maxlength="600" {% if lang == 'hi' %}lang="hi"{% endif %}>{{ row.body if row else '' }}</textarea>
+      <p class="row-form"><button class="btn sm" type="submit">Save draft</button></p>
+    </form>
+    {% if row and row.status == 'Draft' %}
+    <form method="post" action="/explainers/approve">{{ csrf_field(csrf) }}<input type="hidden" name="test_code" value="{{ it.code }}"><input type="hidden" name="lang" value="{{ lang }}"><button class="btn sm primary" type="submit">{{ icon('check', cls='ic xs') }} Approve {{ lbl }}</button></form>
+    {% elif row %}<p class="muted small">Approved by {{ row.approved_by|replace('user:', '') }}</p>{% endif %}
+  {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

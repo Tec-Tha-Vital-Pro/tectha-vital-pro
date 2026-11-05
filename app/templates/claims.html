@@ -27,6 +27,26 @@
       <span class="amt">{{ k.amount|inr }}</span>
       <span class="small"><strong>{{ k.name }}</strong> <span class="uid-sm">{{ k.uid }}</span></span>
       <span class="small {{ 'bad-text' if k.stuck else 'muted' }}">{% if k.stuck %}{{ icon('alert', cls='ic xs') }} Over the limit by {{ k.over }}{% else %}In this stage {{ k.waiting }}{% endif %}</span>
+      {% set cs = k.coding %}
+      {% if cs and cs.status == 'Accepted' %}
+      <p class="codes small">{{ icon('check', cls='ic xs') }} Codes: <span class="mono">{{ cs.accepted|join(', ') }}</span></p>
+      {% elif cs and cs.status == 'Proposed' %}
+      <details class="codes-box" open>
+        <summary class="small">{{ icon('spark', cls='ic xs') }} Suggested codes ({{ 'AI' if cs.model_key == 'coding_claude' else 'rules' }}) · decision support</summary>
+        <ul class="codes-list">{% for i in cs['items'] %}<li><span class="mono">{{ i.code }}</span> {{ i.label }}<span class="evid">“{{ i.evidence }}”</span></li>{% endfor %}</ul>
+        {% if not readonly %}
+        <form method="post" action="/claims/codes/{{ cs.id }}/decide" class="row-form">
+          {{ csrf_field(csrf) }}
+          <label for="cd-{{ cs.id }}" class="sr-only">Codes to keep for {{ k.name }}</label>
+          <input id="cd-{{ cs.id }}" name="codes" value="{{ cs['items']|map(attribute='code')|join(', ') }}" class="mono">
+          <button class="btn sm primary" type="submit">Save codes</button>
+        </form>
+        <p class="muted small">Edit the list, or clear it to reject. A coder signs off; nothing is sent to the payer.</p>
+        {% endif %}
+      </details>
+      {% elif not readonly and c.key not in ('Settled', 'Denied') %}
+      <form method="post" action="/claims/{{ k.id }}/codes/suggest" class="card-move">{{ csrf_field(csrf) }}<button class="btn sm" type="submit">{{ icon('spark', cls='ic xs') }} Suggest codes</button></form>
+      {% endif %}
       {% if c.key not in ('Settled', 'Denied') and not readonly %}
       {% set keys = stages|map('first')|list %}{% set labels = dict(stages) %}
       {% set nxt = keys[keys.index(c.key) + 1] %}

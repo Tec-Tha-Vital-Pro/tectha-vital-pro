@@ -103,7 +103,10 @@ def command_page(request: Request):
         " FROM lab_callouts c JOIN lab_orders l ON l.id = c.lab_order_id JOIN lab_tests t ON t.code = l.test_code"
         " JOIN patients p ON p.id = l.patient_id WHERE c.status = 'Open'" + (" AND l.branch_id = ?" if branch else "")
         + " ORDER BY c.created_at", (branch,) if branch else ())
-    return ui.render(request, "command.html", user, wall=wall, now=now, alerts=alerts, branch=branch, **data)
+    from app.ai_features import news2
+    n2_alerts = news2.open_alerts(branch)
+    return ui.render(request, "command.html", user, wall=wall, now=now, alerts=alerts, branch=branch,
+                     news2_alerts=n2_alerts, **data)
 
 
 # ---------------------------------------------------------------- notifications
