@@ -37,14 +37,14 @@ done
 say() { printf '\n==> %s\n' "$*"; }
 fail() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 
-# ---- 1. Python 3.11 or newer
+# ---- 1. Python 3.10 or newer
 PY=""
 for c in python3.13 python3.12 python3.11 python3 python; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
     PY="$c"; break
   fi
 done
-[ -n "$PY" ] || fail "Python 3.11 or newer is needed. Install it from https://www.python.org/downloads/ (Mac: 'brew install python@3.12'; Ubuntu: 'sudo apt install python3 python3-venv') and run this again."
+[ -n "$PY" ] || fail "Python 3.10 or newer is needed. Install it from https://www.python.org/downloads/ (Mac: 'brew install python@3.12'; Ubuntu: 'sudo apt install python3 python3-venv') and run this again."
 say "Using $("$PY" --version) ($(command -v "$PY"))"
 
 # ---- 2. Virtual environment and requirements (re-installed only when requirements.txt changes)

@@ -21,16 +21,16 @@ $AdminUser = if ($env:TT_DEMO_USER) { $env:TT_DEMO_USER } else { "demo" }
 function Say($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Fail($m) { Write-Host "`nERROR: $m" -ForegroundColor Red; exit 1 }
 
-# ---- 1. Python 3.11 or newer ("py" launcher first, then python)
+# ---- 1. Python 3.10 or newer ("py" launcher first, then python)
 $Py = $null
 foreach ($cand in @(@("py", "-3"), @("python"), @("python3"))) {
     $exe = $cand[0]; $pre = @($cand | Select-Object -Skip 1)
     if (Get-Command $exe -ErrorAction SilentlyContinue) {
-        & $exe @pre -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+        & $exe @pre -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
         if ($LASTEXITCODE -eq 0) { $Py = $cand; break }
     }
 }
-if (-not $Py) { Fail "Python 3.11 or newer is needed. Install it from https://www.python.org/downloads/ (tick 'Add python.exe to PATH') and run this again." }
+if (-not $Py) { Fail "Python 3.10 or newer is needed. Install it from https://www.python.org/downloads/ (tick 'Add python.exe to PATH') and run this again." }
 $PyExe = $Py[0]; $PyPre = @($Py | Select-Object -Skip 1)
 Say ("Using " + (& $PyExe @PyPre --version))
 
